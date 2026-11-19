@@ -1,0 +1,178 @@
+from __future__ import annotations
+
+from pathlib import Path
+
+import pytest
+
+from gradescope_cli.api.client import GradescopeClient
+from gradescope_cli.exceptions import (
+    APIError,
+    AuthError,
+    AutograderTimeoutError,
+    NotFoundError,
+)
+from tests.fixtures import (
+    ASSIGNMENT_PAGE,
+    ASSIGNMENTS_PAGE,
+    COURSES_PAGE,
+    LEADERBOARD_PAGE,
+    LOGIN_PAGE,
+    LOGIN_PAGE_FAILED,
+    SUBMISSION_PAGE_GRADED,
+    SUBMISSION_PAGE_PENDING,
+    FakeResponse,
+    FakeSession,
+)
+
+
+def wire_login(session: FakeSession, success: bool = True) -> None:
+    session.add("GET", "/login", FakeResponse(text=LOGIN_PAGE))
+
+    def post_login(**kwargs: object) -> FakeResponse:
+        if success:
+            session.cookies["_gradescope_session"] = "cookie-value"
+            return FakeResponse(status_code=302, headers={"Location": "/courses"})
+        return FakeResponse(status_code=200, text=LOGIN_PAGE_FAILED)
+
+    session.add("POST", "/login", post_login)
+
+
+class TestLogin:
+    def test_success(self, session: FakeSession, client: GradescopeClient) -> None:
+        wire_login(session, success=True)
+        client.login("student@ucsd.edu", "hunter2")
+        assert client.is_authenticated
+        post = session.last_request("POST")
+        data = post["data"]
+        assert data["session[email]"] == "student@ucsd.edu"
+        assert data["session[password]"] == "hunter2"
+        assert data["authenticity_token"] == "tok-login-123"
+        assert post["allow_redirects"] is False
+
+    def test_failure_raises_auth_error(
+        self, session: FakeSession, client: GradescopeClient
+    ) -> None:
+        wire_login(session, success=False)
+        with pytest.raises(AuthError):
+            client.login("student@ucsd.edu", "wrong")
+        assert not client.is_authenticated
+
+    def test_ensure_logged_in_only_once(
+        self, session: FakeSession, client: GradescopeClient
+    ) -> None:
+        wire_login(session, success=True)
+        client.ensure_logged_in("a", "b")
+        client.ensure_logged_in("a", "b")
+        assert len([r for r in session.requests if r["url"].endswith("/login")]) == 2  # GET + POST
+
+
+class TestBrowse:
+    def test_list_courses(self, session: FakeSession, client: GradescopeClient) -> None:
+        session.add("GET", "/courses", FakeResponse(text=COURSES_PAGE))
+        courses = client.list_courses()
+        assert [c.id for c in courses] == ["111", "222"]
+        assert courses[0].name == "DSC 190 - Capstone Project"
+
+    def test_list_assignments(self, session: FakeSession, client: GradescopeClient) -> None:
+        session.add("GET", "/courses/111/assignments", FakeResponse(text=ASSIGNMENTS_PAGE))
+        assignments = client.list_assignments("111")
+        assert [a.id for a in assignments] == ["777", "888", "999"]
+        assert assignments[0].due_date is not None
+        assert assignments[0].due_date.year == 2026
+
+    def test_404_raises_not_found(self, client: GradescopeClient) -> None:
+        with pytest.raises(NotFoundError):
+            client.list_courses()
+
+
+class TestSubmit:
+    def test_submit_uploads_files_and_parses_redirect(
+        self, session: FakeSession, client: GradescopeClient, tmp_path: Path
+    ) -> None:
+        code = tmp_path / "solution.py"
+        code.write_text("print('hi')\n")
+        notes = tmp_path / "notes.txt"
+        notes.write_text("hello\n")
+        session.add("GET", "/courses/111/assignments/777", FakeResponse(text=ASSIGNMENT_PAGE))
+        session.add(
+            "POST",
+            "/courses/111/assignments/777/submissions",
+            FakeResponse(
+                status_code=302,
+                headers={"Location": "/courses/111/assignments/777/submissions/999"},
+            ),
+        )
+        submission = client.submit("111", "777", [code, str(notes)])
+        assert submission.id == "999"
+        assert submission.url == "/courses/111/assignments/777/submissions/999"
+        post = session.last_request("POST")
+        assert post["data"]["authenticity_token"] == "tok-submit-456"
+        files = post["files"]
+        assert [name for _, (name, _) in files] == ["solution.py", "notes.txt"]
+
+    def test_submit_without_redirect_raises(
+        self, session: FakeSession, client: GradescopeClient, tmp_path: Path
+    ) -> None:
+        f = tmp_path / "a.py"
+        f.write_text("x = 1\n")
+        session.add("GET", "/courses/111/assignments/777", FakeResponse(text=ASSIGNMENT_PAGE))
+        session.add(
+            "POST",
+            "/courses/111/assignments/777/submissions",
+            FakeResponse(status_code=422, text="unprocessable"),
+        )
+        with pytest.raises(APIError) as exc_info:
+            client.submit("111", "777", [f])
+        assert exc_info.value.status_code == 422
+
+    def test_submit_requires_files(self, client: GradescopeClient) -> None:
+        with pytest.raises(ValueError, match="at least one file"):
+            client.submit("111", "777", [])
+
+
+class TestAutograder:
+    SUBMISSION_PATH = "/courses/111/assignments/777/submissions/999"
+
+    def test_get_result_graded(self, session: FakeSession, client: GradescopeClient) -> None:
+        session.add("GET", self.SUBMISSION_PATH, FakeResponse(text=SUBMISSION_PAGE_GRADED))
+        result = client.get_autograder_result("111", "777", "999")
+        assert result.status == "graded"
+        assert result.score == 8.5
+        assert result.max_score == 10.0
+        assert [c.name for c in result.test_cases] == ["test_basic", "test_edge_case"]
+
+    def test_wait_until_graded(self, session: FakeSession, client: GradescopeClient) -> None:
+        calls = {"n": 0}
+
+        def handler(**kwargs: object) -> FakeResponse:
+            calls["n"] += 1
+            text = SUBMISSION_PAGE_PENDING if calls["n"] < 3 else SUBMISSION_PAGE_GRADED
+            return FakeResponse(text=text)
+
+        session.add("GET", self.SUBMISSION_PATH, handler)
+        result = client.wait_for_autograder(
+            "111", "777", "999", poll_interval=0, timeout=60, sleep=lambda _: None
+        )
+        assert result.status == "graded"
+        assert calls["n"] == 3
+
+    def test_wait_timeout(self, session: FakeSession, client: GradescopeClient) -> None:
+        session.add("GET", self.SUBMISSION_PATH, FakeResponse(text=SUBMISSION_PAGE_PENDING))
+        with pytest.raises(AutograderTimeoutError):
+            client.wait_for_autograder(
+                "111", "777", "999", poll_interval=0, timeout=0, sleep=lambda _: None
+            )
+
+
+class TestLeaderboard:
+    def test_get_leaderboard(self, session: FakeSession, client: GradescopeClient) -> None:
+        session.add(
+            "GET",
+            "/courses/111/assignments/777/leaderboard",
+            FakeResponse(text=LEADERBOARD_PAGE),
+        )
+        entries = client.get_leaderboard("111", "777")
+        assert [(e.rank, e.name, e.score) for e in entries] == [
+            (1, "Alice", 99.5),
+            (2, "Bob", 87.0),
+        ]
