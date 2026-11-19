@@ -1,0 +1,52 @@
+[build-system]
+build-backend = "hatchling.build"
+requires = ["hatchling"]
+
+[project]
+name = "gradescope-cli"
+version = "0.1.0"
+description = "CLI and TUI for Gradescope: browse assignments, submit code, track the autograder and leaderboards."
+readme = "README.md"
+requires-python = ">=3.13"
+dependencies = [
+    "beautifulsoup4",
+    "requests",
+]
+
+[project.scripts]
+gradescope = "gradescope_cli.cli.app:main"
+
+[dependency-groups]
+dev = [
+    "mypy>=2.4.1",
+    "pytest>=9.2.0",
+    "ruff>=0.17.5",
+    "types-requests>=2.33.0.20261030",
+]
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/gradescope_cli"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py313"
+src = ["src", "tests"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "SIM", "W"]
+
+[tool.mypy]
+python_version = "3.13"
+files = ["src", "tests"]
+strict = true
+warn_unused_ignores = true
+pretty = true
+
+[[tool.mypy.overrides]]
+module = ["bs4.*"]
+ignore_missing_imports = true
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
+addopts = "-q"
