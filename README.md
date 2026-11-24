@@ -30,8 +30,15 @@ uv run gradescope assignments <course_id>                      # list assignment
 uv run gradescope submit <course_id> <assignment_id> file.py... [--watch]
 uv run gradescope status <course_id> <assignment_id> <submission_id> [--watch]
 uv run gradescope leaderboard <course_id> <assignment_id>
-uv run gradescope tui                                          # interactive TUI (coming soon)
+uv run gradescope tui                                          # interactive TUI
 ```
+
+### TUI keys
+
+- courses: `enter` open · `r` refresh · `q` quit
+- assignments: `enter` open · `s` submit files · `l` leaderboard · `r` refresh · `esc` back
+- assignment: `s` submit files · `g` autograder status · `l` leaderboard · `esc` back
+  (submitting automatically watches the autograder until it finishes)
 
 `python -m gradescope_cli ...` works too.
 
@@ -53,11 +60,14 @@ src/gradescope_cli/
     parsers.py    # pure HTML -> model parsing functions
     models.py     # Course, Assignment, Submission, AutograderResult, LeaderboardEntry
   cli/
-    app.py        # argparse CLI (submit / status / leaderboard / ...)
-    tui.py        # TUI stub (to be built on textual)
+    app.py        # argparse CLI (submit / status / leaderboard / tui)
+  tui/
+    app.py        # textual app shell
+    screens.py    # courses/assignments/assignment/leaderboard screens + modals
   config.py       # GRADESCOPE_* environment credentials
   exceptions.py
-tests/            # pytest suite with a fake HTTP session (no network)
+tests/            # pytest suite with a fake HTTP session (no network);
+                  # the TUI is tested headless via textual's Pilot
 ```
 
 The backend talks to Gradescope's web endpoints (session-cookie login with
@@ -67,7 +77,6 @@ test suite runs fully offline.
 
 ## Roadmap
 
-- [ ] TUI on `textual` for browsing assignments/due dates and submitting
 - [ ] credential file (`~/.config/gradescope-cli`) in addition to env vars
-- [ ] richer autograder output (per-test-case view, history of submissions)
-- [ ] `watch` mode in the TUI for live autograder progress
+- [ ] richer autograder output (per-test-case view, submission history)
+- [ ] file picker (directory tree) in the TUI instead of typed paths

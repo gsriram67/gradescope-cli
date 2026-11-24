@@ -16,6 +16,7 @@ from gradescope_cli.api.models import (
 )
 from gradescope_cli.cli import app
 from gradescope_cli.exceptions import APIError
+from gradescope_cli.tui.app import GradescopeApp
 
 
 class FakeClient:
@@ -162,9 +163,18 @@ class TestCommands:
         assert "Alice" in out and "99.5" in out
         assert "Bob" in out
 
-    def test_tui_stub(self, fake_client: FakeClient, capsys: pytest.CaptureFixture[str]) -> None:
-        assert app.main(["tui"], client=fake_client) == 0
-        assert "not implemented yet" in capsys.readouterr().out
+    def test_tui_launches_app(
+        self, fake_client: FakeClient, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        launched: list[GradescopeApp] = []
+        monkeypatch.setattr(
+            "gradescope_cli.tui.app.GradescopeApp.run",
+            lambda self: launched.append(self),
+        )
+        rc = app.main(["tui"], client=fake_client)
+        assert rc == 0
+        assert len(launched) == 1
+        assert launched[0].client is fake_client
 
     def test_error_handling(
         self, fake_client: FakeClient, capsys: pytest.CaptureFixture[str]

@@ -108,9 +108,10 @@ def cmd_leaderboard(args: argparse.Namespace, client: GradescopeAPI) -> int:
 
 
 def cmd_tui(args: argparse.Namespace, client: GradescopeAPI) -> int:
-    from gradescope_cli.cli.tui import launch_tui
+    from gradescope_cli.tui import GradescopeApp
 
-    return launch_tui(client)
+    GradescopeApp(client).run()
+    return 0
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -150,7 +151,7 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("assignment_id")
     p.set_defaults(func=cmd_leaderboard)
 
-    p = sub.add_parser("tui", help="launch the interactive TUI (coming soon)")
+    p = sub.add_parser("tui", help="launch the interactive TUI")
     p.set_defaults(func=cmd_tui)
 
     return parser
