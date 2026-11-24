@@ -6,14 +6,15 @@ from textual.app import App
 from textual.binding import Binding
 
 from gradescope_cli.api.client import GradescopeAPI
-from gradescope_cli.tui.screens import CoursesScreen
+from gradescope_cli.tui.screens import CoursesScreen, LoginScreen
 
 
 class GradescopeApp(App[None]):
     """Interactive browser for courses, assignments, submissions and leaderboards.
 
     The API backend is injected, so tests can run the app headless with a
-    fake client via ``GradescopeApp(client).run_test()``.
+    fake client via ``GradescopeApp(client).run_test()``. If the client is
+    not authenticated yet, a login screen is shown first.
     """
 
     TITLE = "gradescope-cli"
@@ -33,9 +34,13 @@ class GradescopeApp(App[None]):
     }
     """
 
-    def __init__(self, client: GradescopeAPI) -> None:
+    def __init__(self, client: GradescopeAPI, *, email_hint: str | None = None) -> None:
         super().__init__()
         self.client = client
+        self.email_hint = email_hint
 
     def on_mount(self) -> None:
-        self.push_screen(CoursesScreen())
+        if self.client.is_authenticated:
+            self.push_screen(CoursesScreen())
+        else:
+            self.push_screen(LoginScreen())

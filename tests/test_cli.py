@@ -25,10 +25,12 @@ class FakeClient:
     def __init__(self) -> None:
         self.calls: list[tuple[str, tuple[object, ...]]] = []
         self.email: str | None = None
+        self.is_authenticated = False
 
     def login(self, email: str, password: str) -> None:
         self.calls.append(("login", (email, password)))
         self.email = email
+        self.is_authenticated = True
 
     def list_courses(self) -> list[Course]:
         self.calls.append(("list_courses", ()))
@@ -195,6 +197,22 @@ class TestCommands:
         assert rc == 0
         assert len(launched) == 1
         assert launched[0].client is fake_client
+
+    def test_tui_without_env_creds_defers_to_login_screen(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        # No GRADESCOPE_* env vars: `gradescope tui` must not fail; the TUI's
+        # own login screen handles authentication instead.
+        monkeypatch.delenv("GRADESCOPE_EMAIL", raising=False)
+        monkeypatch.delenv("GRADESCOPE_PASSWORD", raising=False)
+        launched: list[GradescopeApp] = []
+        monkeypatch.setattr(
+            "gradescope_cli.tui.app.GradescopeApp.run", lambda self: launched.append(self)
+        )
+        rc = app.main(["tui"])
+        assert rc == 0
+        assert len(launched) == 1
+        assert launched[0].client.is_authenticated is False
 
     def test_error_handling(
         self, fake_client: FakeClient, capsys: pytest.CaptureFixture[str]

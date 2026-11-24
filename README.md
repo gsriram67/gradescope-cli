@@ -42,8 +42,16 @@ uv run gradescope leaderboard <course_id> <assignment_id>
 uv run gradescope tui                                          # interactive TUI
 ```
 
-### TUI keys
+### TUI
 
+`gradescope tui` opens a login screen first if `GRADESCOPE_EMAIL` /
+`GRADESCOPE_PASSWORD` are not set (regular account email + password; SSO is
+not supported). Once signed in, the TUI browses courses → assignments →
+assignment detail (submit files, watch the autograder, leaderboard).
+
+Keys:
+
+- login: type email/password, `enter` or click "Log In" · `q` quit
 - courses: `enter` open · `r` refresh · `q` quit
 - assignments: `enter` open · `s` submit files · `l` leaderboard · `r` refresh · `esc` back
 - assignment: `s` submit files · `g` autograder status · `l` leaderboard · `esc` back

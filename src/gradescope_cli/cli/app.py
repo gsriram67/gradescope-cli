@@ -13,6 +13,7 @@ Usage:
 from __future__ import annotations
 
 import argparse
+import os
 import sys
 from collections.abc import Callable, Sequence
 from datetime import datetime
@@ -20,8 +21,8 @@ from pathlib import Path
 
 from gradescope_cli.api.client import GradescopeAPI, GradescopeClient
 from gradescope_cli.api.models import AutograderResult, LeaderboardEntry
-from gradescope_cli.config import load_credentials
-from gradescope_cli.exceptions import GradescopeError
+from gradescope_cli.config import ENV_EMAIL, Credentials, load_credentials
+from gradescope_cli.exceptions import ConfigError, GradescopeError
 
 Command = Callable[[argparse.Namespace, GradescopeAPI], int]
 
@@ -111,7 +112,9 @@ def cmd_leaderboard(args: argparse.Namespace, client: GradescopeAPI) -> int:
 def cmd_tui(args: argparse.Namespace, client: GradescopeAPI) -> int:
     from gradescope_cli.tui import GradescopeApp
 
-    GradescopeApp(client).run()
+    # If the client is not authenticated (no env credentials), the TUI opens
+    # with its own login screen. Prefill the email from the env if present.
+    GradescopeApp(client, email_hint=os.environ.get(ENV_EMAIL)).run()
     return 0
 
 
@@ -167,12 +170,20 @@ def main(argv: Sequence[str] | None = None, *, client: GradescopeAPI | None = No
     args = build_parser().parse_args(argv)
     try:
         if client is None:
-            # Only `login` prompts interactively; other commands stay
-            # non-interactive and require the GRADESCOPE_* env vars.
+            # Only `login` prompts on the command line; the TUI has its own
+            # login screen, so for `tui` missing env vars are not an error.
             interactive = bool(getattr(args, "interactive_login", False))
-            creds = load_credentials(interactive=interactive, email=getattr(args, "email", None))
+            try:
+                creds: Credentials | None = load_credentials(
+                    interactive=interactive, email=getattr(args, "email", None)
+                )
+            except ConfigError:
+                if args.func is not cmd_tui:
+                    raise
+                creds = None
             real_client = GradescopeClient()
-            real_client.login(creds.email, creds.password)
+            if creds is not None:
+                real_client.login(creds.email, creds.password)
             client = real_client
         result: int = args.func(args, client)
         return result

@@ -51,6 +51,88 @@ class GradescopeScreen(Screen[None]):
         self.app.notify(f"error: {exc}", severity="error", title="Gradescope")
 
 
+class LoginScreen(GradescopeScreen):
+    """Sign in with a regular Gradescope account (email + password, not SSO)."""
+
+    BINDINGS = [Binding("q", "app.quit", "Quit")]
+
+    CSS = """
+    LoginScreen {
+        align: center middle;
+    }
+    #login-box {
+        width: 60;
+        height: auto;
+        padding: 1 2;
+        border: solid $primary;
+        background: $surface;
+    }
+    #login-title {
+        text-style: bold;
+        padding-bottom: 1;
+    }
+    #login-error {
+        color: $error;
+        height: auto;
+        padding-top: 1;
+    }
+    """
+
+    def compose(self) -> ComposeResult:
+        yield Header()
+        with Vertical(id="login-box"):
+            yield Static("Sign in to Gradescope", id="login-title")
+            yield Label("Email")
+            yield Input(id="email", placeholder="you@ucsd.edu")
+            yield Label("Password")
+            yield Input(id="password", password=True)
+            yield Button("Log In", id="login", variant="primary")
+            yield Static(id="login-error")
+        yield Footer()
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.error_text = ""
+
+    def on_mount(self) -> None:
+        hint = cast("GradescopeApp", self.app).email_hint
+        if hint:
+            self.query_one("#email", Input).value = hint
+
+    @on(Button.Pressed, "#login")
+    def _on_login_button(self) -> None:
+        self._try_login()
+
+    @on(Input.Submitted)
+    def _on_input_submitted(self) -> None:
+        self._try_login()
+
+    def _try_login(self) -> None:
+        email = self.query_one("#email", Input).value.strip()
+        password = self.query_one("#password", Input).value
+        if not email or not password:
+            self._show_error("email and password are required")
+            return
+        self._show_error("signing in...")
+        self.login_worker(email, password)
+
+    @work(thread=True)
+    def login_worker(self, email: str, password: str) -> None:
+        try:
+            self.client.login(email, password)
+        except GradescopeError as exc:
+            self.app.call_from_thread(self._show_error, str(exc))
+            return
+        self.app.call_from_thread(self._on_success)
+
+    def _show_error(self, message: str) -> None:
+        self.error_text = message
+        self.query_one("#login-error", Static).update(message)
+
+    def _on_success(self) -> None:
+        self.app.switch_screen(CoursesScreen())
+
+
 class CoursesScreen(GradescopeScreen):
     """Lists all courses; enter opens one."""
 

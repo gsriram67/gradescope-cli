@@ -67,6 +67,9 @@ class GradescopeAPI(Protocol):
 
     email: str | None  # the account email after a successful login
 
+    @property
+    def is_authenticated(self) -> bool: ...
+
     def login(self, email: str, password: str) -> None: ...
 
     def list_courses(self) -> list[Course]: ...

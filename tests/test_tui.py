@@ -11,12 +11,14 @@ from typing import Any
 from textual.pilot import Pilot
 from textual.widgets import DataTable, Input
 
+from gradescope_cli.exceptions import AuthError
 from gradescope_cli.tui.app import GradescopeApp
 from gradescope_cli.tui.screens import (
     AssignmentScreen,
     AssignmentsScreen,
     CoursesScreen,
     LeaderboardScreen,
+    LoginScreen,
     SubmitModal,
 )
 from tests.test_cli import FakeClient
@@ -36,13 +38,98 @@ async def wait_for(pilot: Pilot[Any], predicate: Callable[[], bool], timeout: fl
     raise AssertionError("condition not met within timeout")
 
 
-def make_app() -> tuple[GradescopeApp, FakeClient]:
+def make_app(*, authenticated: bool = True) -> tuple[GradescopeApp, FakeClient]:
     client = FakeClient()
+    if authenticated:
+        client.login("student@ucsd.edu", "pw")
     return GradescopeApp(client), client
 
 
 def table_rows(app: GradescopeApp) -> int:
     return app.screen.query_one(DataTable).row_count
+
+
+class FailingLoginClient(FakeClient):
+    def login(self, email: str, password: str) -> None:
+        raise AuthError("Gradescope login failed ... SSO ... not supported")
+
+
+def login_screen(app: GradescopeApp) -> LoginScreen:
+    screen = app.screen
+    assert isinstance(screen, LoginScreen)
+    return screen
+
+
+def test_login_screen_shown_when_unauthenticated() -> None:
+    app, _ = make_app(authenticated=False)
+
+    async def go() -> None:
+        async with app.run_test() as pilot:
+            await wait_for(pilot, lambda: isinstance(app.screen, LoginScreen))
+            # email hint is prefilled when provided
+            assert login_screen(app).query_one("#email", Input).value == ""
+
+    run(go())
+
+
+def test_login_screen_prefills_email_hint() -> None:
+    client = FakeClient()
+    app = GradescopeApp(client, email_hint="hint@ucsd.edu")
+
+    async def go() -> None:
+        async with app.run_test() as pilot:
+            await wait_for(pilot, lambda: isinstance(app.screen, LoginScreen))
+            assert login_screen(app).query_one("#email", Input).value == "hint@ucsd.edu"
+
+    run(go())
+
+
+def test_login_flow_then_courses() -> None:
+    app, client = make_app(authenticated=False)
+
+    async def go() -> None:
+        async with app.run_test() as pilot:
+            await wait_for(pilot, lambda: isinstance(app.screen, LoginScreen))
+            screen = login_screen(app)
+            screen.query_one("#email", Input).value = "student@ucsd.edu"
+            screen.query_one("#password", Input).value = "hunter2"
+            await pilot.press("enter")
+            await wait_for(pilot, lambda: isinstance(app.screen, CoursesScreen))
+            await wait_for(pilot, lambda: table_rows(app) == 2)
+            assert ("login", ("student@ucsd.edu", "hunter2")) in client.calls
+            assert client.is_authenticated
+
+    run(go())
+
+
+def test_login_failure_shows_error() -> None:
+    app = GradescopeApp(FailingLoginClient())
+
+    async def go() -> None:
+        async with app.run_test() as pilot:
+            await wait_for(pilot, lambda: isinstance(app.screen, LoginScreen))
+            screen = login_screen(app)
+            screen.query_one("#email", Input).value = "student@ucsd.edu"
+            screen.query_one("#password", Input).value = "wrong"
+            await pilot.press("enter")
+            await wait_for(pilot, lambda: "SSO" in screen.error_text)
+            # still on the login screen
+            assert isinstance(app.screen, LoginScreen)
+
+    run(go())
+
+
+def test_authenticated_client_skips_login_screen() -> None:
+    client = FakeClient()
+    client.is_authenticated = True
+    app = GradescopeApp(client)
+
+    async def go() -> None:
+        async with app.run_test() as pilot:
+            await wait_for(pilot, lambda: isinstance(app.screen, CoursesScreen))
+            await wait_for(pilot, lambda: table_rows(app) == 2)
+
+    run(go())
 
 
 def test_courses_screen_lists_courses() -> None:
