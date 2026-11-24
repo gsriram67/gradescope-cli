@@ -15,6 +15,7 @@ from tests.fixtures import (
     ACCOUNT_PAGE,
     ASSIGNMENT_PAGE,
     ASSIGNMENTS_PAGE,
+    ASSIGNMENTS_REACT_PAGE,
     COURSES_PAGE,
     DASHBOARD_PAGE,
     LEADERBOARD_PAGE,
@@ -108,13 +109,22 @@ class TestBrowse:
         assignments = client.list_assignments("111")
         assert [a.id for a in assignments] == ["777", "888", "999"]
 
-    def test_assignments_dashboard_404_falls_back_to_assignments_page(
+    def test_assignments_dashboard_404_falls_back_to_react_page(
         self, session: FakeSession, client: GradescopeClient
     ) -> None:
-        # /courses/111 404s; the dedicated assignments page has the data
-        session.add("GET", "/courses/111/assignments", FakeResponse(text=ASSIGNMENTS_PAGE))
+        # /courses/111 404s; the /assignments page embeds the React table
+        session.add("GET", "/courses/111/assignments", FakeResponse(text=ASSIGNMENTS_REACT_PAGE))
         assignments = client.list_assignments("111")
         assert [a.id for a in assignments] == ["777", "888", "999"]
+        assert assignments[0].due_date is not None
+
+    def test_assignments_empty_dashboard_and_401_fallback_returns_empty(
+        self, session: FakeSession, client: GradescopeClient
+    ) -> None:
+        # dashboard loads but has no table; /assignments is instructor-only (401)
+        session.add("GET", "/courses/111", FakeResponse(text="<html></html>"))
+        session.add("GET", "/courses/111/assignments", FakeResponse(status_code=401))
+        assert client.list_assignments("111") == []
 
     def test_assignments_all_pages_404_raises_not_found(
         self, session: FakeSession, client: GradescopeClient
@@ -194,6 +204,36 @@ class TestAutograder:
         assert result.score == 8.5
         assert result.max_score == 10.0
         assert [c.name for c in result.test_cases] == ["test_basic", "test_edge_case"]
+
+    def test_get_result_prefers_json_endpoint(
+        self, session: FakeSession, client: GradescopeClient
+    ) -> None:
+        session.add(
+            "GET",
+            self.SUBMISSION_PATH + ".json",
+            FakeResponse(
+                json_data={
+                    "score": 9.0,
+                    "max_score": 10.0,
+                    "submission_questions": [
+                        {"question_number": 1, "name": "q1", "score": 9.0, "max_score": 10.0}
+                    ],
+                }
+            ),
+        )
+        session.add("GET", self.SUBMISSION_PATH, FakeResponse(text=SUBMISSION_PAGE_GRADED))
+        result = client.get_autograder_result("111", "777", "999")
+        assert result.status == "graded"
+        assert result.score == 9.0  # from JSON, not the HTML page (8.5)
+        assert [c.name for c in result.test_cases] == ["q1"]
+
+    def test_get_result_json_unavailable_falls_back_to_html(
+        self, session: FakeSession, client: GradescopeClient
+    ) -> None:
+        # .json 404s (FakeSession default) -> HTML page is used
+        session.add("GET", self.SUBMISSION_PATH, FakeResponse(text=SUBMISSION_PAGE_GRADED))
+        result = client.get_autograder_result("111", "777", "999")
+        assert result.score == 8.5
 
     def test_wait_until_graded(self, session: FakeSession, client: GradescopeClient) -> None:
         calls = {"n": 0}

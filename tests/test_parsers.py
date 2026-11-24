@@ -10,6 +10,7 @@ from tests.fixtures import (
     ACCOUNT_PAGE,
     ASSIGNMENT_PAGE,
     ASSIGNMENTS_PAGE,
+    ASSIGNMENTS_REACT_PAGE,
     COURSES_PAGE,
     DASHBOARD_PAGE,
     LEADERBOARD_PAGE,
@@ -80,14 +81,51 @@ class TestParseCourses:
 
 
 class TestParseAssignments:
-    def test_dashboard_rows(self) -> None:
+    def test_student_dashboard_table(self) -> None:
         assignments = parsers.parse_assignments(DASHBOARD_PAGE, "111")
         assert [a.id for a in assignments] == ["777", "888", "999"]
-        assert assignments[0].title == "Homework 1"
-        # the due date is the *latest* date in the row (close, not open), tz stripped
+        assert assignments[0].title == "Homework 1"  # from button[data-assignment-id]
+        # due date comes from time.submissionTimeChart--dueDate datetime attr
         assert assignments[0].due_date == datetime(2026, 11, 25, 23, 59)
-        assert assignments[1].due_date is not None and assignments[1].due_date.hour == 9
+        assert assignments[1].due_date == datetime(2026, 12, 5, 9, 0)
         assert assignments[2].due_date is None
+
+    def test_react_assignments_page(self) -> None:
+        assignments = parsers.parse_assignments_react(ASSIGNMENTS_REACT_PAGE, "111")
+        assert [a.id for a in assignments] == ["777", "888", "999"]
+        assert assignments[0].title == "Homework 1"
+        assert assignments[0].due_date == datetime(2026, 11, 25, 23, 59)
+        assert assignments[1].due_date == datetime(2026, 12, 5, 9, 0)
+        assert assignments[2].due_date is None
+        assert assignments[0].url == "/courses/111/assignments/777"
+
+    def test_react_page_missing(self) -> None:
+        assert parsers.parse_assignments_react("<html></html>", "111") == []
+
+
+class TestParseSubmissionJson:
+    def test_graded(self) -> None:
+        data = {
+            "score": 8.5,
+            "max_score": 10.0,
+            "submission_questions": [
+                {"question_number": 1, "name": "test_basic", "score": 5.0, "max_score": 5.0},
+                {"question_number": 2, "name": "test_edge", "score": 3.5, "max_score": 5.0},
+            ],
+        }
+        result = parsers.parse_submission_json(data, "999")
+        assert result is not None
+        assert result.status == "graded"
+        assert result.score == 8.5
+        assert result.max_score == 10.0
+        assert [(c.name, c.status) for c in result.test_cases] == [
+            ("test_basic", "passed"),
+            ("test_edge", "failed"),
+        ]
+
+    def test_no_score_returns_none(self) -> None:
+        assert parsers.parse_submission_json({"status": "pending"}, "999") is None
+        assert parsers.parse_submission_json(["not", "a", "dict"], "999") is None
 
     def test_parses_titles_and_due_dates(self) -> None:
         assignments = parsers.parse_assignments(ASSIGNMENTS_PAGE, "111")

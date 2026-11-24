@@ -49,30 +49,58 @@ ACCOUNT_PAGE = """
 
 DASHBOARD_PAGE = """
 <html><body>
-  <table class="table">
-    <tr role="row"><th>Assignment</th><td>Points</td><td>Status</td><td>Opens</td><td>Due</td></tr>
-    <tr role="row">
-      <th><a href="/courses/111/assignments/777/">Homework 1</a></th>
-      <td>8.5 / 10</td>
-      <td>Submitted</td>
-      <td>2026-11-01 00:00:00 -0700</td>
-      <td>2026-11-25 23:59:00 -0800</td>
-    </tr>
-    <tr role="row">
-      <th><a href="/courses/111/assignments/888/">Homework 2</a></th>
-      <td></td>
-      <td>Open</td>
-      <td>2026-11-20 00:00:00 -0800</td>
-      <td>Dec 5 at 9:00am</td>
-    </tr>
-    <tr role="row">
-      <th><a href="/courses/111/assignments/999/">Extra credit</a></th>
-      <td></td>
-      <td>Open</td>
-      <td></td>
-      <td>no due date</td>
-    </tr>
+  <table id="assignments-student-table">
+    <tbody>
+      <tr>
+        <th class="table--primaryLink">
+          <button data-assignment-id="777"
+                  data-post-url="/courses/111/assignments/777/submissions">Homework 1</button>
+        </th>
+        <td class="submissionStatus"><div class="submissionStatus--score">8.5 / 10</div></td>
+        <td>
+          <time class="submissionTimeChart--releaseDate"
+              datetime="2026-11-01T00:00:00-07:00"></time>
+          <time class="submissionTimeChart--dueDate"
+              datetime="2026-11-25T23:59:00-08:00"></time>
+        </td>
+      </tr>
+      <tr>
+        <th class="table--primaryLink">
+          <button data-assignment-id="888"
+                  data-post-url="/courses/111/assignments/888/submissions">Homework 2</button>
+        </th>
+        <td class="submissionStatus"></td>
+        <td>
+          <time class="submissionTimeChart--releaseDate"
+              datetime="2026-11-20T00:00:00-08:00"></time>
+          <time class="submissionTimeChart--dueDate"
+              datetime="2026-12-05T09:00:00-08:00"></time>
+        </td>
+      </tr>
+      <tr>
+        <th class="table--primaryLink">
+          <button data-assignment-id="999"
+                  data-post-url="/courses/111/assignments/999/submissions">Extra credit</button>
+        </th>
+        <td class="submissionStatus"></td>
+        <td></td>
+      </tr>
+    </tbody>
   </table>
+</body></html>
+"""
+
+ASSIGNMENTS_REACT_PAGE = """
+<html><body>
+  <div data-react-class="AssignmentsTable"
+       data-react-props='{"table_data": [
+         {"id": 777, "title": "Homework 1", "url": "/courses/111/assignments/777",
+          "submission_window": {"release_date": "2026-11-01T00:00:00-07:00",
+                                "due_date": "2026-11-25T23:59:00-08:00"}},
+         {"id": 888, "title": "Homework 2", "url": "/courses/111/assignments/888",
+          "submission_window": {"due_date": "2026-12-05T09:00:00-08:00"}},
+         {"id": 999, "title": "Extra credit", "url": "/courses/111/assignments/999"}
+       ]}'></div>
 </body></html>
 """
 
@@ -174,14 +202,18 @@ class FakeResponse:
         text: str = "",
         url: str = "",
         headers: dict[str, str] | None = None,
+        json_data: Any = None,
     ) -> None:
         self.status_code = status_code
         self.text = text
         self.url = url
         self.headers = headers or {}
+        self.json_data = json_data
 
     def json(self) -> Any:
-        raise NotImplementedError
+        if self.json_data is None:
+            raise ValueError("no JSON body")
+        return self.json_data
 
 
 RouteHandler = Callable[..., FakeResponse]

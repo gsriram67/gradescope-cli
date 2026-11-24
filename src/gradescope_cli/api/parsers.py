@@ -6,14 +6,17 @@ test against fixture HTML.
 
 from __future__ import annotations
 
+import json
 import re
 from datetime import datetime
+from typing import Any
 
 from bs4 import BeautifulSoup
 from bs4.element import Tag
 
 from gradescope_cli.api.models import (
     Assignment,
+    AutograderResult,
     Course,
     LeaderboardEntry,
     SubmissionStatus,
@@ -166,12 +169,25 @@ def _find_due_date_in(row: Tag) -> datetime | None:
     return max(dates) if dates else None
 
 
+def _parse_time_datetime(tag: Tag) -> datetime | None:
+    """Parse a ``<time datetime="...">`` attribute into a naive datetime."""
+    raw = tag.get("datetime")
+    if not isinstance(raw, str):
+        return None
+    try:
+        return datetime.fromisoformat(raw).replace(tzinfo=None)
+    except ValueError:
+        return None
+
+
 def parse_assignments(html: str, course_id: str) -> list[Assignment]:
     """Parse a course page into its assignments.
 
-    Handles the current course-dashboard markup (``tr[role="row"]`` rows whose
-    first cell links to ``/courses/<id>/assignments/<id>``), then
-    ``th.table--primaryLink``, then falls back to any matching anchor.
+    Handles, in order: the student dashboard table
+    (``table#assignments-student-table`` with ``button[data-assignment-id]``
+    titles and ``time.submissionTimeChart--dueDate`` dates), the older
+    ``tr[role="row"]`` dashboard rows, ``th.table--primaryLink`` anchors, and
+    finally any anchor pointing at ``/courses/<id>/assignments/<id>``.
     """
     soup = BeautifulSoup(html, "html.parser")
     href_re = _assignment_href(course_id)
@@ -202,7 +218,51 @@ def parse_assignments(html: str, course_id: str) -> list[Assignment]:
             )
         )
 
-    # Current markup: dashboard rows tr[role="row"]; first cell holds the link.
+    # Current student dashboard: table#assignments-student-table, where the
+    # title cell holds a <button data-assignment-id=...> (not an <a href>).
+    student_table = soup.find("table", id="assignments-student-table")
+    if student_table is not None:
+        for tr in student_table.find_all("tr"):
+            th = tr.find("th", class_=lambda c: c is not None and "primaryLink" in str(c))
+            if th is None:
+                continue
+            btn = th.find("button", attrs={"data-assignment-id": True})
+            if btn is not None:
+                aid = str(btn["data-assignment-id"])
+                title = btn.get_text(strip=True) or th.get_text(strip=True)
+            else:
+                a = th.find("a", href=True)
+                if a is None:
+                    continue
+                href = a["href"]
+                if not isinstance(href, str):
+                    continue
+                m = href_re.match(href)
+                if m is None:
+                    continue
+                aid, title = m.group(1), th.get_text(" ", strip=True)
+            if aid in seen or not title:
+                continue
+            seen.add(aid)
+            due_dates = [
+                d
+                for t in tr.find_all("time", class_=lambda c: c is not None and "dueDate" in str(c))
+                if (d := _parse_time_datetime(t)) is not None
+            ]
+            due_date = max(due_dates) if due_dates else _find_due_date_in(tr)
+            assignments.append(
+                Assignment(
+                    id=aid,
+                    course_id=course_id,
+                    title=title,
+                    due_date=due_date,
+                    url=f"/courses/{course_id}/assignments/{aid}",
+                )
+            )
+        if assignments:
+            return assignments
+
+    # Older dashboard markup: rows tr[role="row"]; first cell holds the link.
     for tr in soup.find_all("tr", attrs={"role": "row"}):
         cells = [*tr.find_all("th"), *tr.find_all("td")]
         if not cells:
@@ -227,6 +287,113 @@ def parse_assignments(html: str, course_id: str) -> list[Assignment]:
         row = a.find_parent("tr") or a.find_parent("li") or a.parent
         add(a, a.get_text(strip=True), row if isinstance(row, Tag) else None)
     return assignments
+
+
+def parse_assignments_react(html: str, course_id: str) -> list[Assignment]:
+    """Parse the instructor ``/assignments`` page.
+
+    That page embeds a React table: ``div[data-react-class="AssignmentsTable"]``
+    with a JSON ``data-react-props`` payload containing ``table_data``.
+    (Students get a 401 on this page; they use the dashboard table instead.)
+    """
+    soup = BeautifulSoup(html, "html.parser")
+    div = soup.find("div", attrs={"data-react-class": "AssignmentsTable"})
+    if div is None:
+        return []
+    raw = div.get("data-react-props")
+    if not isinstance(raw, str):
+        return []
+    try:
+        props = json.loads(raw)
+    except json.JSONDecodeError:
+        return []
+    if not isinstance(props, dict):
+        return []
+    assignments: list[Assignment] = []
+    for row in props.get("table_data", []):
+        if not isinstance(row, dict):
+            continue
+        aid = str(row.get("id") or "")
+        title = str(row.get("title") or "")
+        if not aid or not title:
+            continue
+        due_date: datetime | None = None
+        window = row.get("submission_window")
+        if isinstance(window, dict):
+            raw_due = window.get("due_date") or window.get("hard_due_date")
+            if isinstance(raw_due, str):
+                try:
+                    due_date = datetime.fromisoformat(raw_due).replace(tzinfo=None)
+                except ValueError:
+                    due_date = None
+        url = row.get("url")
+        assignments.append(
+            Assignment(
+                id=aid,
+                course_id=course_id,
+                title=title,
+                due_date=due_date,
+                url=url
+                if isinstance(url, str) and url
+                else f"/courses/{course_id}/assignments/{aid}",
+            )
+        )
+    return assignments
+
+
+def _as_float(value: Any) -> float | None:
+    if isinstance(value, (int, float)) and not isinstance(value, bool):
+        return float(value)
+    return None
+
+
+def parse_submission_json(data: Any, submission_id: str) -> AutograderResult | None:
+    """Parse the React submission JSON (``/submissions/<id>.json?content=react``).
+
+    Returns ``None`` when the payload has no score data (e.g. still pending
+    or an unexpected shape), so callers can fall back to HTML scraping.
+    """
+    if not isinstance(data, dict):
+        return None
+    nested = data.get("submission")
+    src: dict[str, Any] = nested if isinstance(nested, dict) else data
+    score = _as_float(src.get("score"))
+    max_score = _as_float(src.get("max_score"))
+    if score is None and max_score is None:
+        return None
+    raw_status = str(src.get("status") or ("graded" if score is not None else "pending")).lower()
+    if raw_status in {"graded", "complete", "completed"} or score is not None:
+        status = "graded"
+    elif raw_status in {"error", "failed"}:
+        status = "error"
+    else:
+        status = "pending"
+    test_cases: list[TestCaseResult] = []
+    questions = src.get("submission_questions") or src.get("questions") or []
+    if isinstance(questions, list):
+        for q in questions:
+            if not isinstance(q, dict):
+                continue
+            name = q.get("name") or q.get("title")
+            if name is None and q.get("question_number") is not None:
+                name = f"Question {q['question_number']}"
+            name = str(name or "")
+            q_score = _as_float(q.get("score"))
+            q_max = _as_float(q.get("max_score"))
+            if q_score is not None and q_max is not None and q_max > 0:
+                case_status = "passed" if q_score >= q_max else "failed"
+            else:
+                case_status = "unknown"
+            test_cases.append(
+                TestCaseResult(name=name, score=q_score, max_score=q_max, status=case_status)
+            )
+    return AutograderResult(
+        submission_id=submission_id,
+        status=status,
+        score=score,
+        max_score=max_score,
+        test_cases=test_cases,
+    )
 
 
 def parse_submission_id(location: str) -> str:

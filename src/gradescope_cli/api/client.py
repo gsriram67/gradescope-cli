@@ -195,38 +195,50 @@ class GradescopeClient:
     # -- browsing ------------------------------------------------------------
 
     def list_courses(self) -> list[Course]:
-        """List all courses the account can see (from the ``/account`` page)."""
-        first_error: NotFoundError | None = None
-        for path in ("/account", "/courses"):  # primary, then fallback layout
+        """List all courses the account can see.
+
+        Tries ``/account``, the homepage (course dashboard), then ``/courses``.
+        """
+        first_error: APIError | None = None
+        got_page = False
+        for path in ("/account", "/", "/courses"):
             try:
                 page = self._get(path)
-            except NotFoundError as exc:
+            except APIError as exc:  # includes NotFoundError
                 first_error = first_error or exc
                 continue
+            got_page = True
             courses = parsers.parse_courses(page.text)
             if courses:
                 return courses
-        if first_error is not None:
+        if not got_page and first_error is not None:
             raise first_error
         return []
 
     def list_assignments(self, course_id: str) -> list[Assignment]:
         """List assignments (with due dates) for a course.
 
-        Tries the course dashboard first, then the dedicated assignments
-        page; whichever yields assignments wins.
+        Students: the course dashboard ``/courses/<id>`` has
+        ``table#assignments-student-table``. Instructors (or newer layouts):
+        ``/courses/<id>/assignments`` embeds a React ``AssignmentsTable``
+        (students get 401 there — tolerated). Raises only if every page
+        failed to load.
         """
-        first_error: NotFoundError | None = None
+        first_error: APIError | None = None
+        got_page = False
         for path in (f"/courses/{course_id}", f"/courses/{course_id}/assignments"):
             try:
                 page = self._get(path)
-            except NotFoundError as exc:
+            except APIError as exc:  # includes NotFoundError; 401 on fallback
                 first_error = first_error or exc
                 continue
+            got_page = True
             assignments = parsers.parse_assignments(page.text, course_id)
+            if not assignments:
+                assignments = parsers.parse_assignments_react(page.text, course_id)
             if assignments:
                 return assignments
-        if first_error is not None:
+        if not got_page and first_error is not None:
             raise first_error
         return []
 
@@ -274,10 +286,23 @@ class GradescopeClient:
     def get_autograder_result(
         self, course_id: str, assignment_id: str, submission_id: str
     ) -> AutograderResult:
-        """Fetch the current autograder status/results for a submission."""
-        page = self._get(
-            f"/courses/{course_id}/assignments/{assignment_id}/submissions/{submission_id}"
-        )
+        """Fetch the current autograder status/results for a submission.
+
+        Prefers the React JSON endpoint (``/submissions/<id>.json``), falling
+        back to parsing the HTML submission page.
+        """
+        base = f"/courses/{course_id}/assignments/{assignment_id}/submissions/{submission_id}"
+        try:
+            resp = self._session.get(
+                self._url(base + ".json"), params={"content": "react"}, timeout=self.timeout
+            )
+            if resp.status_code == 200:
+                result = parsers.parse_submission_json(resp.json(), submission_id)
+                if result is not None:
+                    return result
+        except (APIError, ValueError, NotImplementedError):
+            pass  # JSON unavailable -> fall back to the HTML page
+        page = self._get(base)
         status = parsers.parse_submission_status(page.text)
         return AutograderResult(
             submission_id=submission_id,
