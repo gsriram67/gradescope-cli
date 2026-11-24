@@ -24,9 +24,11 @@ class FakeClient:
 
     def __init__(self) -> None:
         self.calls: list[tuple[str, tuple[object, ...]]] = []
+        self.email: str | None = None
 
     def login(self, email: str, password: str) -> None:
         self.calls.append(("login", (email, password)))
+        self.email = email
 
     def list_courses(self) -> list[Course]:
         self.calls.append(("list_courses", ()))
@@ -114,8 +116,26 @@ class TestParser:
         with pytest.raises(SystemExit):
             app.build_parser().parse_args([])
 
+    def test_login_is_interactive_with_email_option(self) -> None:
+        args = app.build_parser().parse_args(["login", "--email", "a@ucsd.edu"])
+        assert args.interactive_login is True
+        assert args.email == "a@ucsd.edu"
+        assert args.func is app.cmd_login
+        # other commands stay non-interactive
+        args = app.build_parser().parse_args(["courses"])
+        assert getattr(args, "interactive_login", False) is False
+
 
 class TestCommands:
+    def test_login_command(
+        self, fake_client: FakeClient, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        assert app.main(["login"], client=fake_client) == 0
+        fake_client.login("student@ucsd.edu", "pw")
+        assert app.cmd_login(app.build_parser().parse_args(["login"]), fake_client) == 0
+        out = capsys.readouterr().out
+        assert "student@ucsd.edu" in out
+
     def test_courses(self, fake_client: FakeClient, capsys: pytest.CaptureFixture[str]) -> None:
         assert app.main(["courses"], client=fake_client) == 0
         out = capsys.readouterr().out

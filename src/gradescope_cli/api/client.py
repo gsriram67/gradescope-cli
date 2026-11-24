@@ -65,6 +65,8 @@ class HTTPSession(Protocol):
 class GradescopeAPI(Protocol):
     """Backend interface consumed by the CLI/TUI (easy to fake in tests)."""
 
+    email: str | None  # the account email after a successful login
+
     def login(self, email: str, password: str) -> None: ...
 
     def list_courses(self) -> list[Course]: ...
@@ -112,6 +114,7 @@ class GradescopeClient:
         self.base_url = base_url.rstrip("/")
         self.timeout = timeout
         self._logged_in = False
+        self.email: str | None = None
 
     @property
     def is_authenticated(self) -> bool:
@@ -144,9 +147,10 @@ class GradescopeClient:
     # -- auth ---------------------------------------------------------------
 
     def login(self, email: str, password: str) -> None:
-        """Sign in with GRADESCOPE account parameters.
+        """Sign in with a regular Gradescope account (email + password, not SSO).
 
-        Raises :class:`AuthError` if the credentials are rejected.
+        Posts the same form the web login page uses. Raises :class:`AuthError`
+        if the credentials are rejected.
         """
         login_page = self._session.get(self._url("/login"), timeout=self.timeout)
         self._check(login_page, "GET", "/login")
@@ -154,19 +158,25 @@ class GradescopeClient:
         resp = self._session.post(
             self._url("/login"),
             data={
+                "utf8": "✓",
                 "authenticity_token": token,
                 "session[email]": email,
                 "session[password]": password,
                 "session[remember_me]": "1",
+                "commit": "Log In",
             },
             timeout=self.timeout,
             allow_redirects=False,
         )
         if resp.status_code in (301, 302, 303) or SESSION_COOKIE in self._session.cookies:
             self._logged_in = True
+            self.email = email
             return
         raise AuthError(
-            "Gradescope login failed; check your GRADESCOPE_EMAIL / GRADESCOPE_PASSWORD."
+            "Gradescope login failed for that email/password. Note: school (SAML) and "
+            "Google SSO sign-in are not supported by this tool — use a regular Gradescope "
+            "account (if your account is SSO-only, set a Gradescope password via "
+            "'Forgot your password?' on the login page)."
         )
 
     def ensure_logged_in(self, email: str, password: str) -> None:

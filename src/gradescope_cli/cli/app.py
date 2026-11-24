@@ -47,7 +47,8 @@ def _print_result(result: AutograderResult) -> None:
 
 
 def cmd_login(args: argparse.Namespace, client: GradescopeAPI) -> int:
-    print("Successfully authenticated with Gradescope.")
+    who = client.email or "Gradescope account"
+    print(f"Successfully authenticated with Gradescope as {who}.")
     return 0
 
 
@@ -122,8 +123,12 @@ def build_parser() -> argparse.ArgumentParser:
     )
     sub = parser.add_subparsers(dest="command", required=True)
 
-    p = sub.add_parser("login", help="verify that your credentials work")
-    p.set_defaults(func=cmd_login)
+    p = sub.add_parser(
+        "login",
+        help="sign in with a regular Gradescope account (prompts if env vars are unset)",
+    )
+    p.add_argument("--email", help="account email (skips the email prompt)")
+    p.set_defaults(func=cmd_login, interactive_login=True)
 
     p = sub.add_parser("courses", help="list your courses")
     p.set_defaults(func=cmd_courses)
@@ -162,7 +167,10 @@ def main(argv: Sequence[str] | None = None, *, client: GradescopeAPI | None = No
     args = build_parser().parse_args(argv)
     try:
         if client is None:
-            creds = load_credentials()
+            # Only `login` prompts interactively; other commands stay
+            # non-interactive and require the GRADESCOPE_* env vars.
+            interactive = bool(getattr(args, "interactive_login", False))
+            creds = load_credentials(interactive=interactive, email=getattr(args, "email", None))
             real_client = GradescopeClient()
             real_client.login(creds.email, creds.password)
             client = real_client

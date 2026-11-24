@@ -47,15 +47,18 @@ class TestLogin:
         assert data["session[email]"] == "student@ucsd.edu"
         assert data["session[password]"] == "hunter2"
         assert data["authenticity_token"] == "tok-login-123"
+        assert data["commit"] == "Log In"  # same fields as the web login form
         assert post["allow_redirects"] is False
+        assert client.email == "student@ucsd.edu"
 
     def test_failure_raises_auth_error(
         self, session: FakeSession, client: GradescopeClient
     ) -> None:
         wire_login(session, success=False)
-        with pytest.raises(AuthError):
+        with pytest.raises(AuthError, match="SSO"):
             client.login("student@ucsd.edu", "wrong")
         assert not client.is_authenticated
+        assert client.email is None
 
     def test_ensure_logged_in_only_once(
         self, session: FakeSession, client: GradescopeClient

@@ -14,17 +14,26 @@ A CLI (and soon a TUI) for [Gradescope](https://www.gradescope.com):
 uv sync          # install dependencies into .venv
 ```
 
-Set your credentials (e.g. in your shell profile or a `.env` you source):
+Sign in with a **regular Gradescope account** (email + password — school/SAML
+and Google SSO are not supported). Either export the environment variables
+(e.g. in your shell profile or a `.env` you source):
 
 ```bash
 export GRADESCOPE_EMAIL="you@ucsd.edu"
 export GRADESCOPE_PASSWORD="..."
 ```
 
+or let `gradescope login` prompt you interactively (password via `getpass`,
+never echoed) when the variables are unset:
+
+```bash
+uv run gradescope login --email you@ucsd.edu   # only asks for the password
+```
+
 ## Usage
 
 ```bash
-uv run gradescope login                                        # verify credentials
+uv run gradescope login                                        # sign in / verify credentials
 uv run gradescope courses                                      # list courses
 uv run gradescope assignments <course_id>                      # list assignments + due dates
 uv run gradescope submit <course_id> <assignment_id> file.py... [--watch]
