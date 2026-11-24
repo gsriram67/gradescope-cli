@@ -9,8 +9,9 @@ from pathlib import Path
 from typing import Any
 
 from textual.pilot import Pilot
-from textual.widgets import DataTable, Input
+from textual.widgets import DataTable, Input, Static
 
+from gradescope_cli.api.models import Course
 from gradescope_cli.exceptions import AuthError
 from gradescope_cli.tui.app import GradescopeApp
 from gradescope_cli.tui.screens import (
@@ -128,6 +129,32 @@ def test_authenticated_client_skips_login_screen() -> None:
         async with app.run_test() as pilot:
             await wait_for(pilot, lambda: isinstance(app.screen, CoursesScreen))
             await wait_for(pilot, lambda: table_rows(app) == 2)
+
+    run(go())
+
+
+class EmptyCoursesClient(FakeClient):
+    def list_courses(self) -> list[Course]:
+        self.calls.append(("list_courses", ()))
+        return []
+
+
+def test_empty_courses_shows_visible_hint() -> None:
+    """Regression test: an empty course list must be visible, not a blank table."""
+    client = EmptyCoursesClient()
+    client.login("student@ucsd.edu", "pw")
+    app = GradescopeApp(client)
+
+    async def go() -> None:
+        async with app.run_test() as pilot:
+            await wait_for(
+                pilot,
+                lambda: (
+                    isinstance(app.screen, CoursesScreen)
+                    and "No courses found" in str(app.screen.query_one(".hint", Static).content)
+                ),
+            )
+            assert table_rows(app) == 0
 
     run(go())
 

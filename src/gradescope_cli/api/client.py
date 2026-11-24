@@ -16,6 +16,7 @@ from collections.abc import Callable, Sequence
 from contextlib import ExitStack
 from pathlib import Path
 from typing import Any, Protocol, cast
+from urllib.parse import urlparse
 
 import requests
 
@@ -145,6 +146,11 @@ class GradescopeClient:
     def _get(self, path: str, **kwargs: Any) -> HTTPResponse:
         resp = self._session.get(self._url(path), timeout=self.timeout, **kwargs)
         self._check(resp, "GET", path)
+        # If we were bounced to the login page, the session is not
+        # authenticated — fail loudly instead of parsing the login HTML.
+        final_path = urlparse(resp.url).path.rstrip("/")
+        if path != "/login" and final_path == "/login":
+            raise AuthError("not authenticated (request was redirected to /login)")
         return resp
 
     # -- auth ---------------------------------------------------------------
@@ -189,13 +195,20 @@ class GradescopeClient:
     # -- browsing ------------------------------------------------------------
 
     def list_courses(self) -> list[Course]:
-        """List all courses the account can see."""
-        return parsers.parse_courses(self._get("/courses").text)
+        """List all courses the account can see (from the ``/account`` page)."""
+        courses = parsers.parse_courses(self._get("/account").text)
+        if not courses:  # fallback for older/other layouts
+            courses = parsers.parse_courses(self._get("/courses").text)
+        return courses
 
     def list_assignments(self, course_id: str) -> list[Assignment]:
-        """List assignments (with due dates) for a course."""
-        page = self._get(f"/courses/{course_id}/assignments")
-        return parsers.parse_assignments(page.text, course_id)
+        """List assignments (with due dates) for a course dashboard."""
+        assignments = parsers.parse_assignments(self._get(f"/courses/{course_id}").text, course_id)
+        if not assignments:  # fallback: dedicated assignments page
+            assignments = parsers.parse_assignments(
+                self._get(f"/courses/{course_id}/assignments").text, course_id
+            )
+        return assignments
 
     # -- submissions ----------------------------------------------------------
 

@@ -7,9 +7,11 @@ import pytest
 from gradescope_cli.api import parsers
 from gradescope_cli.exceptions import ParseError
 from tests.fixtures import (
+    ACCOUNT_PAGE,
     ASSIGNMENT_PAGE,
     ASSIGNMENTS_PAGE,
     COURSES_PAGE,
+    DASHBOARD_PAGE,
     LEADERBOARD_PAGE,
     LOGIN_PAGE,
     SUBMISSION_PAGE_GRADED,
@@ -55,6 +57,14 @@ class TestParseDueDate:
 
 
 class TestParseCourses:
+    def test_account_page_course_boxes(self) -> None:
+        courses = parsers.parse_courses(ACCOUNT_PAGE)
+        assert [c.id for c in courses] == ["111", "222"]
+        assert courses[0].name == "DSC 190 - Capstone Project"
+        assert courses[0].code == "DSC 190"
+        assert courses[0].url == "/courses/111"
+        assert courses[1].name == "CSE 151A"  # absolute URL variant
+
     def test_parses_and_dedupes(self) -> None:
         courses = parsers.parse_courses(COURSES_PAGE)
         assert [c.id for c in courses] == ["111", "222"]
@@ -69,6 +79,14 @@ class TestParseCourses:
 
 
 class TestParseAssignments:
+    def test_dashboard_primary_links(self) -> None:
+        assignments = parsers.parse_assignments(DASHBOARD_PAGE, "111")
+        assert [a.id for a in assignments] == ["777", "888", "999"]
+        assert assignments[0].title == "Homework 1"
+        assert assignments[0].due_date == datetime(2026, 11, 25, 23, 59)
+        assert assignments[1].due_date is not None and assignments[1].due_date.hour == 9
+        assert assignments[2].due_date is None
+
     def test_parses_titles_and_due_dates(self) -> None:
         assignments = parsers.parse_assignments(ASSIGNMENTS_PAGE, "111")
         assert [a.id for a in assignments] == ["777", "888", "999"]

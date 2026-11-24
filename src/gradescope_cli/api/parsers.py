@@ -82,9 +82,38 @@ def _assignment_href(course_id: str) -> re.Pattern[str]:
 
 
 def parse_courses(html: str) -> list[Course]:
-    """Parse the ``/courses`` page into a de-duplicated list of courses."""
+    """Parse a courses page into a de-duplicated list of courses.
+
+    Handles the current ``/account`` markup (``a.courseBox`` with an ``h3``
+    name) and falls back to any anchor pointing at ``/courses/<id>``.
+    """
     soup = BeautifulSoup(html, "html.parser")
     courses: dict[str, Course] = {}
+
+    # Current markup: course boxes on the /account page.
+    for a in soup.find_all("a", class_="courseBox", href=True):
+        href = a["href"]
+        if not isinstance(href, str):
+            continue
+        m = _COURSE_HREF.match(href)
+        if m is None:
+            continue
+        course_id = m.group(1)
+        if course_id in courses:
+            continue
+        name_el = a.find("h3")
+        name = name_el.get_text(strip=True) if name_el is not None else a.get_text(strip=True)
+        if not name:
+            continue
+        code: str | None = None
+        code_el = a.find(class_=lambda c: c is not None and "short" in str(c).lower())
+        if code_el is not None:
+            code = code_el.get_text(strip=True) or None
+        courses[course_id] = Course(id=course_id, name=name, code=code, url=f"/courses/{course_id}")
+    if courses:
+        return list(courses.values())
+
+    # Fallback: any anchor pointing at /courses/<id>.
     for a in soup.find_all("a", href=True):
         href = a["href"]
         if not isinstance(href, str):
@@ -96,7 +125,7 @@ def parse_courses(html: str) -> list[Course]:
         name = a.get_text(strip=True)
         if course_id in courses or not name:
             continue
-        code: str | None = None
+        code = None
         card = a.find_parent("div")
         if card is not None:
             code_el = card.find(class_=lambda c: c is not None and "code" in str(c).lower())
@@ -117,26 +146,30 @@ def _find_due_date_in(row: Tag) -> datetime | None:
 
 
 def parse_assignments(html: str, course_id: str) -> list[Assignment]:
-    """Parse a course's ``/assignments`` page."""
+    """Parse a course page into its assignments.
+
+    Handles the current course-dashboard markup (``th.table--primaryLink``
+    containing the assignment link) and falls back to any anchor pointing at
+    ``/courses/<id>/assignments/<id>``.
+    """
     soup = BeautifulSoup(html, "html.parser")
     href_re = _assignment_href(course_id)
     seen: set[str] = set()
     assignments: list[Assignment] = []
-    for a in soup.find_all("a", href=True):
-        href = a["href"]
+
+    def add(anchor: Tag, title: str, row: Tag | None) -> None:
+        href = anchor["href"]
         if not isinstance(href, str):
-            continue
+            return
         m = href_re.match(href)
         if m is None:
-            continue
+            return
         assignment_id = m.group(1)
-        title = a.get_text(strip=True)
         if assignment_id in seen or not title:
-            continue
+            return
         seen.add(assignment_id)
         due_date: datetime | None = None
-        row = a.find_parent("tr") or a.find_parent("li") or a.parent
-        if isinstance(row, Tag):
+        if row is not None:
             due_date = _find_due_date_in(row)
         assignments.append(
             Assignment(
@@ -147,6 +180,19 @@ def parse_assignments(html: str, course_id: str) -> list[Assignment]:
                 url=f"/courses/{course_id}/assignments/{assignment_id}",
             )
         )
+
+    # Current markup: course dashboard table, th.table--primaryLink > a.
+    for th in soup.find_all("th", class_=lambda c: c is not None and "primaryLink" in str(c)):
+        a = th.find("a", href=True)
+        if a is not None:
+            add(a, th.get_text(" ", strip=True), th.find_parent("tr"))
+    if assignments:
+        return assignments
+
+    # Fallback: any anchor to /courses/<id>/assignments/<id>.
+    for a in soup.find_all("a", href=True):
+        row = a.find_parent("tr") or a.find_parent("li") or a.parent
+        add(a, a.get_text(strip=True), row if isinstance(row, Tag) else None)
     return assignments
 
 

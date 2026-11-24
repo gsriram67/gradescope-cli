@@ -28,6 +28,38 @@ LOGIN_PAGE_FAILED = """
 </body></html>
 """
 
+ACCOUNT_PAGE = """
+<html><body>
+  <a class="courseBox" href="/courses/111">
+    <h3>DSC 190 - Capstone Project</h3>
+    <span class="courseBox--shortName">DSC 190</span>
+  </a>
+  <a class="courseBox" href="https://www.gradescope.com/courses/222">
+    <h3>CSE 151A</h3>
+    <span class="courseBox--shortName">CSE 151A</span>
+  </a>
+</body></html>
+"""
+
+DASHBOARD_PAGE = """
+<html><body>
+  <table class="table">
+    <tr>
+      <th class="table--primaryLink"><a href="/courses/111/assignments/777">Homework 1</a></th>
+      <td class="due-date">Nov 25, 2026 at 11:59pm PDT</td>
+    </tr>
+    <tr>
+      <th class="table--primaryLink"><a href="/courses/111/assignments/888">Homework 2</a></th>
+      <td class="due-date">Dec 5 at 9:00am</td>
+    </tr>
+    <tr>
+      <th class="table--primaryLink"><a href="/courses/111/assignments/999">Extra credit</a></th>
+      <td class="due-date">no due date</td>
+    </tr>
+  </table>
+</body></html>
+"""
+
 COURSES_PAGE = """
 <html><body>
   <div class="course-card">
@@ -164,7 +196,8 @@ class FakeSession:
         if handler is None:
             return FakeResponse(status_code=404, text="not found", url=url)
         resp = handler(**kwargs) if callable(handler) else handler
-        resp.url = url
+        if not resp.url:  # handlers may preset url to simulate redirects
+            resp.url = url
         return resp
 
     def last_request(self, method: str | None = None) -> dict[str, Any]:

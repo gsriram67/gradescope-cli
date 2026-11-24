@@ -12,9 +12,11 @@ from gradescope_cli.exceptions import (
     NotFoundError,
 )
 from tests.fixtures import (
+    ACCOUNT_PAGE,
     ASSIGNMENT_PAGE,
     ASSIGNMENTS_PAGE,
     COURSES_PAGE,
+    DASHBOARD_PAGE,
     LEADERBOARD_PAGE,
     LOGIN_PAGE,
     LOGIN_PAGE_FAILED,
@@ -70,18 +72,53 @@ class TestLogin:
 
 
 class TestBrowse:
-    def test_list_courses(self, session: FakeSession, client: GradescopeClient) -> None:
-        session.add("GET", "/courses", FakeResponse(text=COURSES_PAGE))
+    def test_list_courses_from_account_page(
+        self, session: FakeSession, client: GradescopeClient
+    ) -> None:
+        session.add("GET", "/account", FakeResponse(text=ACCOUNT_PAGE))
+        session.add("GET", "/courses", FakeResponse(text="<html></html>"))
         courses = client.list_courses()
         assert [c.id for c in courses] == ["111", "222"]
         assert courses[0].name == "DSC 190 - Capstone Project"
+        assert courses[0].code == "DSC 190"
 
-    def test_list_assignments(self, session: FakeSession, client: GradescopeClient) -> None:
-        session.add("GET", "/courses/111/assignments", FakeResponse(text=ASSIGNMENTS_PAGE))
+    def test_list_courses_fallback_to_courses_page(
+        self, session: FakeSession, client: GradescopeClient
+    ) -> None:
+        session.add("GET", "/account", FakeResponse(text="<html></html>"))
+        session.add("GET", "/courses", FakeResponse(text=COURSES_PAGE))
+        courses = client.list_courses()
+        assert [c.id for c in courses] == ["111", "222"]
+
+    def test_list_assignments_from_dashboard(
+        self, session: FakeSession, client: GradescopeClient
+    ) -> None:
+        session.add("GET", "/courses/111", FakeResponse(text=DASHBOARD_PAGE))
+        session.add("GET", "/courses/111/assignments", FakeResponse(text="<html></html>"))
         assignments = client.list_assignments("111")
         assert [a.id for a in assignments] == ["777", "888", "999"]
         assert assignments[0].due_date is not None
         assert assignments[0].due_date.year == 2026
+
+    def test_list_assignments_fallback_page(
+        self, session: FakeSession, client: GradescopeClient
+    ) -> None:
+        session.add("GET", "/courses/111", FakeResponse(text="<html></html>"))
+        session.add("GET", "/courses/111/assignments", FakeResponse(text=ASSIGNMENTS_PAGE))
+        assignments = client.list_assignments("111")
+        assert [a.id for a in assignments] == ["777", "888", "999"]
+
+    def test_redirect_to_login_raises_auth_error(
+        self, session: FakeSession, client: GradescopeClient
+    ) -> None:
+        # session expired: /account bounces to /login (requests follows it)
+        session.add(
+            "GET",
+            "/account",
+            FakeResponse(text=LOGIN_PAGE, url="https://gradescope.test/login"),
+        )
+        with pytest.raises(AuthError, match="not authenticated"):
+            client.list_courses()
 
     def test_404_raises_not_found(self, client: GradescopeClient) -> None:
         with pytest.raises(NotFoundError):

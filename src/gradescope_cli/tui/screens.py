@@ -8,6 +8,7 @@ workers so the UI never blocks; results are applied via call_from_thread.
 from __future__ import annotations
 
 import time
+from contextlib import suppress
 from datetime import datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, cast
@@ -16,6 +17,7 @@ from textual import on, work
 from textual.app import ComposeResult
 from textual.binding import Binding
 from textual.containers import Vertical
+from textual.css.query import NoMatches
 from textual.screen import ModalScreen, Screen
 from textual.widgets import Button, DataTable, Footer, Header, Input, Label, Static
 
@@ -48,7 +50,17 @@ class GradescopeScreen(Screen[None]):
         return cast("GradescopeApp", self.app).client
 
     def notify_error(self, exc: Exception) -> None:
-        self.app.notify(f"error: {exc}", severity="error", title="Gradescope")
+        self.show_error(str(exc))
+
+    def show_error(self, message: str) -> None:
+        """Show an error as a toast AND persistently in the hint line."""
+        self.app.notify(f"error: {message}", severity="error", title="Gradescope")
+        with suppress(NoMatches):
+            self.query_one(".hint", Static).update(f"error: {message}  (r: retry)")
+
+    def set_hint(self, message: str) -> None:
+        with suppress(NoMatches):
+            self.query_one(".hint", Static).update(message)
 
 
 class LoginScreen(GradescopeScreen):
@@ -157,6 +169,7 @@ class CoursesScreen(GradescopeScreen):
         table.add_column("ID", key="id", width=10)
         table.add_column("Course", key="name")
         table.add_column("Code", key="code", width=12)
+        self.set_hint("loading courses...")
         self.reload_courses()
 
     @work(thread=True)
@@ -164,7 +177,7 @@ class CoursesScreen(GradescopeScreen):
         try:
             courses = self.client.list_courses()
         except GradescopeError as exc:
-            self.app.call_from_thread(self.notify_error, exc)
+            self.app.call_from_thread(self.show_error, str(exc))
             return
         self.app.call_from_thread(self.populate_courses, courses)
 
@@ -175,6 +188,8 @@ class CoursesScreen(GradescopeScreen):
         for course in courses:
             table.add_row(course.id, course.name, course.code or "", key=course.id)
             self._courses[course.id] = course
+        if not courses:
+            self.set_hint("No courses found — are you enrolled? (r: retry · q: quit)")
 
     def action_reload(self) -> None:
         self.reload_courses()
@@ -217,6 +232,7 @@ class AssignmentsScreen(GradescopeScreen):
         table.add_column("ID", key="id", width=10)
         table.add_column("Assignment", key="title")
         table.add_column("Due", key="due", width=18)
+        self.set_hint(f"loading assignments for {self.course.name}...")
         self.reload_assignments()
 
     @work(thread=True)
@@ -224,7 +240,7 @@ class AssignmentsScreen(GradescopeScreen):
         try:
             assignments = self.client.list_assignments(self.course.id)
         except GradescopeError as exc:
-            self.app.call_from_thread(self.notify_error, exc)
+            self.app.call_from_thread(self.show_error, str(exc))
             return
         self.app.call_from_thread(self.populate_assignments, assignments)
 
@@ -237,6 +253,8 @@ class AssignmentsScreen(GradescopeScreen):
                 assignment.id, assignment.title, fmt_due(assignment.due_date), key=assignment.id
             )
             self._assignments[assignment.id] = assignment
+        if not assignments:
+            self.set_hint("No assignments found. (r: retry · esc: back)")
 
     def action_reload(self) -> None:
         self.reload_assignments()
@@ -336,7 +354,7 @@ class AssignmentScreen(GradescopeScreen):
         try:
             submission = self.client.submit(self.course.id, self.assignment.id, paths)
         except (GradescopeError, OSError, ValueError) as exc:
-            self.app.call_from_thread(self.notify_error, exc)
+            self.app.call_from_thread(self.show_error, str(exc))
             self.app.call_from_thread(self._set_status, f"submit failed: {exc}")
             return
         self.app.call_from_thread(self._after_submit, submission)
@@ -370,7 +388,7 @@ class AssignmentScreen(GradescopeScreen):
                     self.course.id, self.assignment.id, submission_id
                 )
             except GradescopeError as exc:
-                self.app.call_from_thread(self.notify_error, exc)
+                self.app.call_from_thread(self.show_error, str(exc))
                 return
             if result.status != "pending":
                 self.app.call_from_thread(self._show_result, result)
@@ -425,6 +443,7 @@ class LeaderboardScreen(GradescopeScreen):
         table.add_column("Rank", key="rank", width=6)
         table.add_column("Name", key="name")
         table.add_column("Score", key="score", width=10)
+        self.set_hint("loading leaderboard...")
         self.reload()
 
     @work(thread=True)
@@ -432,7 +451,7 @@ class LeaderboardScreen(GradescopeScreen):
         try:
             entries = self.client.get_leaderboard(self.course.id, self.assignment.id)
         except GradescopeError as exc:
-            self.app.call_from_thread(self.notify_error, exc)
+            self.app.call_from_thread(self.show_error, str(exc))
             return
         self.app.call_from_thread(self.populate, entries)
 
@@ -441,6 +460,8 @@ class LeaderboardScreen(GradescopeScreen):
         table.clear()
         for entry in entries:
             table.add_row(str(entry.rank), entry.name, f"{entry.score:g}", key=str(entry.rank))
+        if not entries:
+            self.set_hint("No leaderboard entries. (r: retry · esc: back)")
 
     def action_reload(self) -> None:
         self.reload()
