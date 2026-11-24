@@ -108,6 +108,20 @@ class TestBrowse:
         assignments = client.list_assignments("111")
         assert [a.id for a in assignments] == ["777", "888", "999"]
 
+    def test_assignments_dashboard_404_falls_back_to_assignments_page(
+        self, session: FakeSession, client: GradescopeClient
+    ) -> None:
+        # /courses/111 404s; the dedicated assignments page has the data
+        session.add("GET", "/courses/111/assignments", FakeResponse(text=ASSIGNMENTS_PAGE))
+        assignments = client.list_assignments("111")
+        assert [a.id for a in assignments] == ["777", "888", "999"]
+
+    def test_assignments_all_pages_404_raises_not_found(
+        self, session: FakeSession, client: GradescopeClient
+    ) -> None:
+        with pytest.raises(NotFoundError):
+            client.list_assignments("111")
+
     def test_redirect_to_login_raises_auth_error(
         self, session: FakeSession, client: GradescopeClient
     ) -> None:

@@ -37,6 +37,7 @@ class TestParseDueDate:
         [
             ("Nov 25, 2026 at 11:59pm", datetime(2026, 11, 25, 23, 59)),
             ("Nov 25, 2026 at 11:59pm PDT", datetime(2026, 11, 25, 23, 59)),
+            ("2026-11-25 23:59:00 -0800", datetime(2026, 11, 25, 23, 59)),  # tz stripped
             ("2026-12-01 23:59", datetime(2026, 12, 1, 23, 59)),
         ],
     )
@@ -60,10 +61,10 @@ class TestParseCourses:
     def test_account_page_course_boxes(self) -> None:
         courses = parsers.parse_courses(ACCOUNT_PAGE)
         assert [c.id for c in courses] == ["111", "222"]
-        assert courses[0].name == "DSC 190 - Capstone Project"
-        assert courses[0].code == "DSC 190"
+        assert courses[0].name == "DSC 190 - Capstone Project"  # div.courseBox--name
+        assert courses[0].code == "DSC 190"  # h3.courseBox--shortname
         assert courses[0].url == "/courses/111"
-        assert courses[1].name == "CSE 151A"  # absolute URL variant
+        assert courses[1].name == "CSE 151A - Intro to ML"  # absolute URL variant
 
     def test_parses_and_dedupes(self) -> None:
         courses = parsers.parse_courses(COURSES_PAGE)
@@ -79,10 +80,11 @@ class TestParseCourses:
 
 
 class TestParseAssignments:
-    def test_dashboard_primary_links(self) -> None:
+    def test_dashboard_rows(self) -> None:
         assignments = parsers.parse_assignments(DASHBOARD_PAGE, "111")
         assert [a.id for a in assignments] == ["777", "888", "999"]
         assert assignments[0].title == "Homework 1"
+        # the due date is the *latest* date in the row (close, not open), tz stripped
         assert assignments[0].due_date == datetime(2026, 11, 25, 23, 59)
         assert assignments[1].due_date is not None and assignments[1].due_date.hour == 9
         assert assignments[2].due_date is None

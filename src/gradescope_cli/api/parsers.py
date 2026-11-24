@@ -33,6 +33,7 @@ _DUE_DATE_FORMATS = (
     "%B %d, %Y at %I:%M%p",
     "%B %d at %I:%M%p",
     "%b %d, %Y %I:%M%p",
+    "%Y-%m-%d %H:%M:%S %z",  # dashboard cells, e.g. "2026-11-25 23:59:00 -0800"
     "%Y-%m-%d %H:%M:%S",
     "%Y-%m-%d %H:%M",
     "%Y-%m-%d",
@@ -40,10 +41,11 @@ _DUE_DATE_FORMATS = (
 
 
 def parse_due_date(text: str, *, now: datetime | None = None) -> datetime | None:
-    """Parse a Gradescope due-date string, returning ``None`` if unrecognized.
+    """Parse a Gradescope date string, returning ``None`` if unrecognized.
 
     Yearless dates (e.g. "Dec 5 at 9:00am") are resolved to the next
     occurrence relative to ``now`` (defaults to the current time).
+    Timezone-aware results are normalized to naive local datetimes.
     """
     now = now or datetime.now()
     cleaned = _TZ_SUFFIX.sub("", " ".join(text.split()))
@@ -62,6 +64,8 @@ def parse_due_date(text: str, *, now: datetime | None = None) -> datetime | None
                 continue
             if "%Y" not in fmt and parsed < now:
                 continue  # already past; try next year
+            if parsed.tzinfo is not None:
+                parsed = parsed.replace(tzinfo=None)
             return parsed
     return None
 
@@ -101,12 +105,15 @@ def parse_courses(html: str) -> list[Course]:
         course_id = m.group(1)
         if course_id in courses:
             continue
-        name_el = a.find("h3")
+        # courseBox: div.courseBox--name = full name, h3.courseBox--shortname = code
+        name_el = a.find("div", class_="courseBox--name") or a.find("h3")
         name = name_el.get_text(strip=True) if name_el is not None else a.get_text(strip=True)
         if not name:
             continue
         code: str | None = None
-        code_el = a.find(class_=lambda c: c is not None and "short" in str(c).lower())
+        code_el = a.find("h3", class_="courseBox--shortname") or a.find(
+            class_=lambda c: c is not None and "short" in str(c).lower()
+        )
         if code_el is not None:
             code = code_el.get_text(strip=True) or None
         courses[course_id] = Course(id=course_id, name=name, code=code, url=f"/courses/{course_id}")
@@ -136,21 +143,35 @@ def parse_courses(html: str) -> list[Course]:
 
 
 def _find_due_date_in(row: Tag) -> datetime | None:
-    """Find a parseable due date inside a table row / list item."""
+    """Find the due date inside a table row / list item.
+
+    Dashboard rows contain both an open and a close/due date, so the latest
+    parseable date in the row wins. ``<time datetime="...">`` attributes are
+    also honored.
+    """
+    dates: list[datetime] = []
+    for time_el in row.find_all("time"):
+        raw = time_el.get("datetime")
+        if isinstance(raw, str):
+            try:
+                parsed = datetime.fromisoformat(raw)
+            except ValueError:
+                continue
+            dates.append(parsed.replace(tzinfo=None))
     due_cells = row.find_all(class_=lambda c: c is not None and "due" in str(c).lower())
-    for el in [*due_cells, *row.find_all(["td", "span", "div"])]:
-        parsed = parse_due_date(el.get_text(" ", strip=True))
-        if parsed is not None:
-            return parsed
-    return None
+    for el in [*due_cells, *row.find_all(["td", "th", "span", "div"])]:
+        cell_date = parse_due_date(el.get_text(" ", strip=True))
+        if cell_date is not None:
+            dates.append(cell_date)
+    return max(dates) if dates else None
 
 
 def parse_assignments(html: str, course_id: str) -> list[Assignment]:
     """Parse a course page into its assignments.
 
-    Handles the current course-dashboard markup (``th.table--primaryLink``
-    containing the assignment link) and falls back to any anchor pointing at
-    ``/courses/<id>/assignments/<id>``.
+    Handles the current course-dashboard markup (``tr[role="row"]`` rows whose
+    first cell links to ``/courses/<id>/assignments/<id>``), then
+    ``th.table--primaryLink``, then falls back to any matching anchor.
     """
     soup = BeautifulSoup(html, "html.parser")
     href_re = _assignment_href(course_id)
@@ -181,7 +202,19 @@ def parse_assignments(html: str, course_id: str) -> list[Assignment]:
             )
         )
 
-    # Current markup: course dashboard table, th.table--primaryLink > a.
+    # Current markup: dashboard rows tr[role="row"]; first cell holds the link.
+    for tr in soup.find_all("tr", attrs={"role": "row"}):
+        cells = [*tr.find_all("th"), *tr.find_all("td")]
+        if not cells:
+            continue
+        first = cells[0]
+        a = first.find("a", href=True)
+        if a is not None:
+            add(a, first.get_text(" ", strip=True), tr)
+    if assignments:
+        return assignments
+
+    # Older markup: th.table--primaryLink > a.
     for th in soup.find_all("th", class_=lambda c: c is not None and "primaryLink" in str(c)):
         a = th.find("a", href=True)
         if a is not None:

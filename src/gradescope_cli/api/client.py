@@ -196,19 +196,39 @@ class GradescopeClient:
 
     def list_courses(self) -> list[Course]:
         """List all courses the account can see (from the ``/account`` page)."""
-        courses = parsers.parse_courses(self._get("/account").text)
-        if not courses:  # fallback for older/other layouts
-            courses = parsers.parse_courses(self._get("/courses").text)
-        return courses
+        first_error: NotFoundError | None = None
+        for path in ("/account", "/courses"):  # primary, then fallback layout
+            try:
+                page = self._get(path)
+            except NotFoundError as exc:
+                first_error = first_error or exc
+                continue
+            courses = parsers.parse_courses(page.text)
+            if courses:
+                return courses
+        if first_error is not None:
+            raise first_error
+        return []
 
     def list_assignments(self, course_id: str) -> list[Assignment]:
-        """List assignments (with due dates) for a course dashboard."""
-        assignments = parsers.parse_assignments(self._get(f"/courses/{course_id}").text, course_id)
-        if not assignments:  # fallback: dedicated assignments page
-            assignments = parsers.parse_assignments(
-                self._get(f"/courses/{course_id}/assignments").text, course_id
-            )
-        return assignments
+        """List assignments (with due dates) for a course.
+
+        Tries the course dashboard first, then the dedicated assignments
+        page; whichever yields assignments wins.
+        """
+        first_error: NotFoundError | None = None
+        for path in (f"/courses/{course_id}", f"/courses/{course_id}/assignments"):
+            try:
+                page = self._get(path)
+            except NotFoundError as exc:
+                first_error = first_error or exc
+                continue
+            assignments = parsers.parse_assignments(page.text, course_id)
+            if assignments:
+                return assignments
+        if first_error is not None:
+            raise first_error
+        return []
 
     # -- submissions ----------------------------------------------------------
 

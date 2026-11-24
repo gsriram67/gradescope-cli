@@ -30,31 +30,47 @@ LOGIN_PAGE_FAILED = """
 
 ACCOUNT_PAGE = """
 <html><body>
-  <a class="courseBox" href="/courses/111">
-    <h3>DSC 190 - Capstone Project</h3>
-    <span class="courseBox--shortName">DSC 190</span>
-  </a>
-  <a class="courseBox" href="https://www.gradescope.com/courses/222">
-    <h3>CSE 151A</h3>
-    <span class="courseBox--shortName">CSE 151A</span>
-  </a>
+  <h2 class="pageHeading">Student Courses</h2>
+  <div class="courseList">
+    <div class="courseList--term">Fall 2026</div>
+    <div class="courseList--coursesForTerm">
+      <a class="courseBox" href="/courses/111">
+        <h3 class="courseBox--shortname">DSC 190</h3>
+        <div class="courseBox--name">DSC 190 - Capstone Project</div>
+      </a>
+      <a class="courseBox" href="https://www.gradescope.com/courses/222">
+        <h3 class="courseBox--shortname">CSE 151A</h3>
+        <div class="courseBox--name">CSE 151A - Intro to ML</div>
+      </a>
+    </div>
+  </div>
 </body></html>
 """
 
 DASHBOARD_PAGE = """
 <html><body>
   <table class="table">
-    <tr>
-      <th class="table--primaryLink"><a href="/courses/111/assignments/777">Homework 1</a></th>
-      <td class="due-date">Nov 25, 2026 at 11:59pm PDT</td>
+    <tr role="row"><th>Assignment</th><td>Points</td><td>Status</td><td>Opens</td><td>Due</td></tr>
+    <tr role="row">
+      <th><a href="/courses/111/assignments/777/">Homework 1</a></th>
+      <td>8.5 / 10</td>
+      <td>Submitted</td>
+      <td>2026-11-01 00:00:00 -0700</td>
+      <td>2026-11-25 23:59:00 -0800</td>
     </tr>
-    <tr>
-      <th class="table--primaryLink"><a href="/courses/111/assignments/888">Homework 2</a></th>
-      <td class="due-date">Dec 5 at 9:00am</td>
+    <tr role="row">
+      <th><a href="/courses/111/assignments/888/">Homework 2</a></th>
+      <td></td>
+      <td>Open</td>
+      <td>2026-11-20 00:00:00 -0800</td>
+      <td>Dec 5 at 9:00am</td>
     </tr>
-    <tr>
-      <th class="table--primaryLink"><a href="/courses/111/assignments/999">Extra credit</a></th>
-      <td class="due-date">no due date</td>
+    <tr role="row">
+      <th><a href="/courses/111/assignments/999/">Extra credit</a></th>
+      <td></td>
+      <td>Open</td>
+      <td></td>
+      <td>no due date</td>
     </tr>
   </table>
 </body></html>
