@@ -73,6 +73,32 @@ class TestScore:
         assert render.score_style(None, 10) == ""
 
 
+class TestSortAssignments:
+    def test_by_time_to_due(self) -> None:
+        from gradescope_cli.api.models import Assignment
+
+        def a(aid: str, due: datetime | None) -> Assignment:
+            return Assignment(id=aid, course_id="1", title=aid, due_date=due)
+
+        now = datetime(2026, 11, 24, 12, 0)
+        items = [
+            a("none", None),
+            a("past-most-overdue", datetime(2026, 10, 1)),
+            a("upcoming-later", datetime(2026, 12, 10)),
+            a("past-recent", datetime(2026, 11, 20)),
+            a("upcoming-soon", datetime(2026, 11, 26)),
+        ]
+        ordered = [x.id for x in render.sort_assignments(items, now=now)]
+        # soonest upcoming first, past deadlines at the bottom (most overdue last)
+        assert ordered == [
+            "upcoming-soon",
+            "upcoming-later",
+            "past-recent",
+            "past-most-overdue",
+            "none",
+        ]
+
+
 class TestStatus:
     def test_labels_and_styles(self) -> None:
         assert render.status_label("graded") == "graded"

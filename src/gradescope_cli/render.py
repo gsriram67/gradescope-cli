@@ -7,6 +7,7 @@ wraps these in Rich ``Text`` with the style names returned here.
 from __future__ import annotations
 
 from datetime import datetime, timedelta
+from typing import Any
 
 STATUS_LABELS = {
     "graded": "graded",
@@ -141,3 +142,19 @@ def score_style(score: float | None, max_score: float | None) -> str:
     if frac >= 0.5:
         return "yellow"
     return "red"
+
+
+def assignment_sort_key(a: Any, now: datetime) -> tuple[int, float]:
+    """Order by time-to-due: soonest upcoming on top, past deadlines at the
+    bottom (most overdue last), no-due-date last of all."""
+    if a.due_date is None:
+        return (2, 0.0)
+    if a.due_date < now:  # past deadline: most overdue goes last
+        return (1, -a.due_date.timestamp())
+    return (0, a.due_date.timestamp())  # upcoming: soonest first
+
+
+def sort_assignments(assignments: list[Any], *, now: datetime | None = None) -> list[Any]:
+    """Sort assignments by time to due date (see :func:`assignment_sort_key`)."""
+    now = now or datetime.now()
+    return sorted(assignments, key=lambda a: assignment_sort_key(a, now))

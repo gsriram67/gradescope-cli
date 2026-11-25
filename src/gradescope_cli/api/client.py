@@ -34,6 +34,7 @@ from gradescope_cli.exceptions import (
     AutograderTimeoutError,
     NotFoundError,
 )
+from gradescope_cli.render import sort_assignments
 
 BASE_URL = "https://www.gradescope.com"
 
@@ -239,7 +240,7 @@ class GradescopeClient:
             if not assignments:
                 assignments = parsers.parse_assignments_react(page.text, course_id)
             if assignments:
-                return assignments
+                return sort_assignments(assignments)
         if not got_page and first_error is not None:
             raise first_error
         return []
