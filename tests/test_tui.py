@@ -246,6 +246,32 @@ def test_open_assignment_and_leaderboard() -> None:
     run(go())
 
 
+def test_assignment_screen_lists_and_tracks_submissions() -> None:
+    app, _ = make_app()
+
+    async def go() -> None:
+        async with app.run_test() as pilot:
+            await wait_for(pilot, lambda: table_rows(app) == 2)  # courses
+            await pilot.press("enter")
+            await wait_for(pilot, lambda: isinstance(app.screen, AssignmentsScreen))
+            await wait_for(pilot, lambda: table_rows(app) == 2)  # assignments
+            await pilot.press("enter")  # open assignment
+            await wait_for(pilot, lambda: isinstance(app.screen, AssignmentScreen))
+            screen = app.screen
+            assert isinstance(screen, AssignmentScreen)
+            # submissions table loads with the FakeClient history
+            subs = screen.query_one("#submissions", DataTable)
+            await wait_for(pilot, lambda: subs.row_count == 2)
+            # press enter on the first submission -> autograder result shown
+            subs.focus()
+            await pilot.press("enter")
+            await wait_for(pilot, lambda: "graded" in screen.status_text)
+            assert screen.submission_id == "999"
+            assert "8.5/10" in screen.status_text
+
+    run(go())
+
+
 def test_submit_flow_watches_autograder(tmp_path: Path) -> None:
     code = tmp_path / "solution.py"
     code.write_text("print('hi')\n")

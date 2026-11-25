@@ -19,6 +19,7 @@ from gradescope_cli.api.models import (
     AutograderResult,
     Course,
     LeaderboardEntry,
+    Submission,
     SubmissionStatus,
     TestCaseResult,
 )
@@ -476,6 +477,58 @@ def parse_submission_json(data: Any, submission_id: str) -> AutograderResult | N
         max_score=max_score,
         test_cases=test_cases,
     )
+
+
+def parse_submissions(html: str, course_id: str, assignment_id: str) -> list[Submission]:
+    """Parse an assignment page's "your submissions" list.
+
+    Finds anchors to ``/courses/<cid>/assignments/<aid>/submissions/<id>`` and
+    pulls the submitted time (``<time datetime>`` or any date cell) and score
+    from the surrounding row.
+    """
+    soup = BeautifulSoup(html, "html.parser")
+    pattern = re.compile(
+        rf"/courses/{re.escape(course_id)}/assignments/{re.escape(assignment_id)}/submissions/(\d+)"
+    )
+    seen: set[str] = set()
+    result: list[Submission] = []
+    for a in soup.find_all("a", href=True):
+        href = a["href"]
+        if not isinstance(href, str):
+            continue
+        m = pattern.search(href)
+        if m is None:
+            continue
+        submission_id = m.group(1)
+        if submission_id in seen:
+            continue
+        seen.add(submission_id)
+        submitted_at: datetime | None = None
+        score: float | None = None
+        row = a.find_parent("tr") or a.find_parent("li")
+        if isinstance(row, Tag):
+            time_el = row.find("time")
+            if time_el is not None:
+                submitted_at = _parse_time_datetime(time_el)
+            if submitted_at is None:
+                submitted_at = _find_due_date_in(row)
+            score_el = row.find(class_=lambda c: c is not None and "score" in str(c).lower())
+            if score_el is not None:
+                sm = _SCORE.search(score_el.get_text(" ", strip=True))
+                if sm is not None:
+                    score = float(sm.group(1))
+        result.append(
+            Submission(
+                id=submission_id,
+                course_id=course_id,
+                assignment_id=assignment_id,
+                submitted_at=submitted_at,
+                score=score,
+                status="graded" if score is not None else "submitted",
+                url=f"/courses/{course_id}/assignments/{assignment_id}/submissions/{submission_id}",
+            )
+        )
+    return result
 
 
 def parse_submission_id(location: str) -> str:

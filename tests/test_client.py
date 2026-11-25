@@ -195,6 +195,15 @@ class TestSubmit:
             client.submit("111", "777", [])
 
 
+class TestSubmissions:
+    def test_list_submissions(self, session: FakeSession, client: GradescopeClient) -> None:
+        session.add("GET", "/courses/111/assignments/777", FakeResponse(text=ASSIGNMENT_PAGE))
+        subs = client.list_submissions("111", "777")
+        assert [s.id for s in subs] == ["999", "998"]
+        assert subs[0].score == 8.5
+        assert subs[0].submitted_at is not None
+
+
 class TestAutograder:
     SUBMISSION_PATH = "/courses/111/assignments/777/submissions/999"
 

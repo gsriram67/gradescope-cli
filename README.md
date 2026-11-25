@@ -47,6 +47,7 @@ uv run gradescope login                                        # sign in / verif
 uv run gradescope courses                                      # list courses
 uv run gradescope assignments <course_id>                      # list assignments + due dates
 uv run gradescope submit <course_id> <assignment_id> file.py... [--watch]
+uv run gradescope submissions <course_id> <assignment_id>         # your submission history
 uv run gradescope status <course_id> <assignment_id> <submission_id> [--watch]
 uv run gradescope leaderboard <course_id> <assignment_id>
 uv run gradescope tui                                          # interactive TUI
@@ -64,7 +65,8 @@ Keys:
 - login: type email/password, `enter` or click "Log In" · `q` quit
 - courses (sorted by term, most recent first): `enter` open · `r` refresh · `q` quit
 - assignments (due date, status, score bar): `enter` open · `s` submit files · `l` leaderboard · `r` refresh · `esc` back
-- assignment (progress bar + per-test-case bars): `s` submit files · `g` autograder status · `l` leaderboard · `esc` back
+- assignment (progress bar + per-test-case bars + your submissions):
+  `enter` on a submission tracks its autograder · `s` submit files · `g` autograder status · `l` leaderboard · `esc` back
   (submitting automatically watches the autograder until it finishes)
 
 `python -m gradescope_cli ...` works too.

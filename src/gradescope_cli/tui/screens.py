@@ -45,7 +45,6 @@ from gradescope_cli.exceptions import ConfigError, GradescopeError
 from gradescope_cli.render import (
     due_style,
     due_text,
-    fmt_due,
     score_bar,
     score_style,
     score_text,
@@ -384,23 +383,56 @@ class AssignmentScreen(GradescopeScreen):
         yield Static(id="info", classes="hint")
         yield ProgressBar(id="progress", total=None)  # indeterminate until graded
         yield Static(id="status")
+        yield DataTable(id="submissions", cursor_type="row")
         yield DataTable(id="cases", cursor_type="row")
         yield Footer()
 
     def on_mount(self) -> None:
-        due = fmt_due(self.assignment.due_date)
         self.query_one("#info", Static).update(
-            f"{self.assignment.title} (assignment {self.assignment.id}) — due {due} · "
-            "s: submit · g: autograder · l: leaderboard · esc: back"
+            f"{self.assignment.title} (assignment {self.assignment.id}) — "
+            f"due {due_text(self.assignment.due_date)} · "
+            "enter: track submission · s: submit · g: autograder · l: leaderboard · esc: back"
         )
+        submissions = self.query_one("#submissions", DataTable)
+        submissions.add_column("Submission", key="id", width=12)
+        submissions.add_column("Submitted", key="when")
+        submissions.add_column("Score", key="score", width=22)
         cases = self.query_one("#cases", DataTable)
         cases.display = False
         cases.add_column("Test case", key="name")
         cases.add_column("Result", key="result", width=9)
         cases.add_column("Score", key="score", width=22)
+        self.load_submissions_worker()
+        submissions.focus()
         if self._submit_paths is not None:
             paths, self._submit_paths = self._submit_paths, None
             self._do_submit(paths)
+
+    @work(thread=True)
+    def load_submissions_worker(self) -> None:
+        try:
+            submissions = self.client.list_submissions(self.course.id, self.assignment.id)
+        except GradescopeError as exc:
+            self.app.call_from_thread(self.show_error, str(exc))
+            return
+        self.app.call_from_thread(self.populate_submissions, submissions)
+
+    def populate_submissions(self, submissions: list[Submission]) -> None:
+        table = self.query_one("#submissions", DataTable)
+        table.clear()
+        for s in submissions:
+            table.add_row(
+                Text(f"#{s.id}"),
+                due_cell(s.submitted_at),
+                score_cell(s.score, self.assignment.max_score),
+                key=s.id,
+            )
+
+    @on(DataTable.RowSelected, "#submissions")
+    def track_submission(self, event: DataTable.RowSelected) -> None:
+        self.submission_id = str(event.row_key.value)
+        self._set_status(f"tracking submission #{self.submission_id}...")
+        self.poll_worker(watch=True)
 
     def action_back(self) -> None:
         self.app.pop_screen()
@@ -433,6 +465,7 @@ class AssignmentScreen(GradescopeScreen):
         self.submission_id = submission.id
         self._set_status(f"submitted #{submission.id} — watching autograder...")
         self.poll_worker(watch=True)
+        self.load_submissions_worker()  # refresh the submissions list
 
     def action_grade(self) -> None:
         if self.submission_id is None:

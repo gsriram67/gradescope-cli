@@ -81,6 +81,8 @@ class GradescopeAPI(Protocol):
         self, course_id: str, assignment_id: str, files: Sequence[str | Path]
     ) -> Submission: ...
 
+    def list_submissions(self, course_id: str, assignment_id: str) -> list[Submission]: ...
+
     def get_autograder_result(
         self, course_id: str, assignment_id: str, submission_id: str
     ) -> AutograderResult: ...
@@ -280,6 +282,11 @@ class GradescopeClient:
             status_code=resp.status_code,
             url=resp.url,
         )
+
+    def list_submissions(self, course_id: str, assignment_id: str) -> list[Submission]:
+        """List the account's submissions for an assignment (from its page)."""
+        page = self._get(f"/courses/{course_id}/assignments/{assignment_id}")
+        return parsers.parse_submissions(page.text, course_id, assignment_id)
 
     # -- autograder ------------------------------------------------------------
 

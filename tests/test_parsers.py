@@ -165,6 +165,23 @@ class TestParseSubmissionJson:
         assert parsers.parse_assignments(html, "111") == []
 
 
+class TestParseSubmissions:
+    def test_parses_submission_history(self) -> None:
+        subs = parsers.parse_submissions(ASSIGNMENT_PAGE, "111", "777")
+        assert [s.id for s in subs] == ["999", "998"]
+        assert subs[0].submitted_at == datetime(2026, 11, 24, 10, 0)
+        assert subs[0].score == 8.5
+        assert subs[0].status == "graded"
+        assert subs[1].score is None
+        assert subs[1].status == "submitted"
+        assert subs[0].url == "/courses/111/assignments/777/submissions/999"
+        # the upload form action is not a submission
+        assert all(s.id != "" for s in subs)
+
+    def test_empty(self) -> None:
+        assert parsers.parse_submissions("<html></html>", "111", "777") == []
+
+
 class TestParseSubmissionId:
     def test_from_redirect(self) -> None:
         assert parsers.parse_submission_id("/courses/111/assignments/777/submissions/999") == "999"

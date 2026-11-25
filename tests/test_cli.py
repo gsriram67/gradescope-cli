@@ -63,6 +63,26 @@ class FakeClient:
             url=f"/courses/{course_id}/assignments/{assignment_id}/submissions/999",
         )
 
+    def list_submissions(self, course_id: str, assignment_id: str) -> list[Submission]:
+        self.calls.append(("list_submissions", (course_id, assignment_id)))
+        return [
+            Submission(
+                id="999",
+                course_id=course_id,
+                assignment_id=assignment_id,
+                submitted_at=datetime(2026, 11, 24, 10, 0),
+                score=8.5,
+                status="graded",
+            ),
+            Submission(
+                id="998",
+                course_id=course_id,
+                assignment_id=assignment_id,
+                submitted_at=datetime(2026, 11, 23, 9, 0),
+                status="submitted",
+            ),
+        ]
+
     def get_autograder_result(
         self, course_id: str, assignment_id: str, submission_id: str
     ) -> AutograderResult:
@@ -180,6 +200,14 @@ class TestCommands:
         assert "test_basic" in out
         assert ("wait_for_autograder", ("111", "777", "999")) in fake_client.calls
 
+    def test_submissions(self, fake_client: FakeClient, capsys: pytest.CaptureFixture[str]) -> None:
+        assert app.main(["submissions", "111", "777"], client=fake_client) == 0
+        out = capsys.readouterr().out
+        assert "999" in out and "998" in out
+        assert "graded" in out and "submitted" in out
+        assert "8.5" in out
+        assert ("list_submissions", ("111", "777")) in fake_client.calls
+
     def test_status(self, fake_client: FakeClient, capsys: pytest.CaptureFixture[str]) -> None:
         assert app.main(["status", "111", "777", "999"], client=fake_client) == 0
         out = capsys.readouterr().out
@@ -255,12 +283,13 @@ class TestCommands:
         assert "Saved credentials" in capsys.readouterr().out
 
     def test_tui_without_env_creds_defers_to_login_screen(
-        self, monkeypatch: pytest.MonkeyPatch
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
     ) -> None:
-        # No GRADESCOPE_* env vars: `gradescope tui` must not fail; the TUI's
-        # own login screen handles authentication instead.
+        # No GRADESCOPE_* env vars and no cached credentials: `gradescope tui`
+        # must not fail; the TUI's own login screen handles authentication.
         monkeypatch.delenv("GRADESCOPE_EMAIL", raising=False)
         monkeypatch.delenv("GRADESCOPE_PASSWORD", raising=False)
+        monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path))  # empty cache
         launched: list[GradescopeApp] = []
         monkeypatch.setattr(
             "gradescope_cli.tui.app.GradescopeApp.run", lambda self: launched.append(self)
@@ -269,6 +298,38 @@ class TestCommands:
         assert rc == 0
         assert len(launched) == 1
         assert launched[0].client.is_authenticated is False
+
+    def test_tui_uses_cached_credentials(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    ) -> None:
+        # With a saved credentials file and no env vars, `gradescope tui`
+        # signs in from the cache (no login screen needed).
+        from gradescope_cli.config import Credentials, save_credentials
+
+        monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path))
+        monkeypatch.delenv("GRADESCOPE_EMAIL", raising=False)
+        monkeypatch.delenv("GRADESCOPE_PASSWORD", raising=False)
+        save_credentials(Credentials(email="cached@ucsd.edu", password="pw"))
+
+        class FakeRealClient:
+            email: str | None = None
+
+            def __init__(self) -> None:
+                self.is_authenticated = False
+
+            def login(self, email: str, password: str) -> None:
+                self.email = email
+                self.is_authenticated = True
+
+        monkeypatch.setattr(app, "GradescopeClient", FakeRealClient)
+        launched: list[GradescopeApp] = []
+        monkeypatch.setattr(
+            "gradescope_cli.tui.app.GradescopeApp.run", lambda self: launched.append(self)
+        )
+        assert app.main(["tui"]) == 0
+        client = launched[0].client
+        assert client.is_authenticated is True
+        assert client.email == "cached@ucsd.edu"
 
     def test_error_handling(
         self, fake_client: FakeClient, capsys: pytest.CaptureFixture[str]

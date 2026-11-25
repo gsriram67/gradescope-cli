@@ -38,6 +38,9 @@ class Submission:
     id: str
     course_id: str
     assignment_id: str
+    submitted_at: datetime | None = None
+    score: float | None = None
+    status: str | None = None
     url: str = ""
 
 

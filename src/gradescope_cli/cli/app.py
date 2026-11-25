@@ -5,6 +5,7 @@ Usage:
     gradescope courses
     gradescope assignments <course_id>
     gradescope submit <course_id> <assignment_id> <files...> [--watch]
+    gradescope submissions <course_id> <assignment_id>
     gradescope status <course_id> <assignment_id> <submission_id> [--watch]
     gradescope leaderboard <course_id> <assignment_id>
     gradescope tui
@@ -94,6 +95,18 @@ def cmd_submit(args: argparse.Namespace, client: GradescopeAPI) -> int:
     return 0
 
 
+def cmd_submissions(args: argparse.Namespace, client: GradescopeAPI) -> int:
+    submissions = client.list_submissions(args.course_id, args.assignment_id)
+    if not submissions:
+        print("No submissions yet — submit something first.")
+        return 0
+    for s in submissions:
+        when = due_text(s.submitted_at) if s.submitted_at else "-"
+        score = f"{s.score:g}" if s.score is not None else "-"
+        print(f"{s.id:>10}  submitted {when:<34}  {status_label(s.status):<10}  score {score}")
+    return 0
+
+
 def cmd_status(args: argparse.Namespace, client: GradescopeAPI) -> int:
     if args.watch:
         result = client.wait_for_autograder(args.course_id, args.assignment_id, args.submission_id)
@@ -180,6 +193,11 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("files", nargs="+", type=Path, help="file(s) to upload")
     p.add_argument("--watch", action="store_true", help="wait for the autograder to finish")
     p.set_defaults(func=cmd_submit)
+
+    p = sub.add_parser("submissions", help="list your submissions for an assignment")
+    p.add_argument("course_id")
+    p.add_argument("assignment_id")
+    p.set_defaults(func=cmd_submissions)
 
     p = sub.add_parser("status", help="show autograder status for a submission")
     p.add_argument("course_id")

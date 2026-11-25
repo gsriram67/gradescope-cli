@@ -38,7 +38,11 @@ class GradescopeApp(App[None]):
     }
     #cases {
         height: auto;
-        max-height: 40%;
+        max-height: 30%;
+    }
+    #submissions {
+        height: auto;
+        max-height: 30%;
     }
     DataTable {
         height: 1fr;

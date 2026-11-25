@@ -151,6 +151,18 @@ ASSIGNMENT_PAGE = """
     <input type="hidden" name="authenticity_token" value="tok-submit-456" />
     <input type="file" name="submission[files][]" multiple />
   </form>
+  <table class="submissions-table">
+    <tr>
+      <td><a href="/courses/111/assignments/777/submissions/999">Submission #999</a></td>
+      <td><time datetime="2026-11-24T10:00:00-08:00"></time></td>
+      <td class="submissionStatus--score">8.5 / 10</td>
+    </tr>
+    <tr>
+      <td><a href="/courses/111/assignments/777/submissions/998">Submission #998</a></td>
+      <td><time datetime="2026-11-23T09:00:00-08:00"></time></td>
+      <td></td>
+    </tr>
+  </table>
 </body></html>
 """
 
