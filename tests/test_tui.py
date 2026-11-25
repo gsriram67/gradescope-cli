@@ -8,6 +8,7 @@ from collections.abc import Callable, Coroutine
 from pathlib import Path
 from typing import Any
 
+import pytest
 from textual.pilot import Pilot
 from textual.widgets import DataTable, Input, Static
 
@@ -101,6 +102,35 @@ def test_login_flow_then_courses() -> None:
             assert client.is_authenticated
 
     run(go())
+
+
+def test_login_remember_me_saves_credentials(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from textual.widgets import Checkbox
+
+    from gradescope_cli.config import credentials_path, load_cached_credentials
+
+    monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path))
+    monkeypatch.delenv("GRADESCOPE_EMAIL", raising=False)
+    monkeypatch.delenv("GRADESCOPE_PASSWORD", raising=False)
+    app, _ = make_app(authenticated=False)
+
+    async def go() -> None:
+        async with app.run_test() as pilot:
+            await wait_for(pilot, lambda: isinstance(app.screen, LoginScreen))
+            screen = login_screen(app)
+            screen.query_one("#email", Input).value = "student@ucsd.edu"
+            screen.query_one("#password", Input).value = "hunter2"
+            screen.query_one("#save", Checkbox).value = True
+            await pilot.press("enter")
+            await wait_for(pilot, lambda: isinstance(app.screen, CoursesScreen))
+
+    run(go())
+    saved = load_cached_credentials(credentials_path())
+    assert saved is not None
+    assert saved.email == "student@ucsd.edu"
+    assert saved.password == "hunter2"
 
 
 def test_login_failure_shows_error() -> None:

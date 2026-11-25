@@ -205,6 +205,55 @@ class TestCommands:
         assert len(launched) == 1
         assert launched[0].client is fake_client
 
+    def test_logout_clears_saved_credentials(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        from gradescope_cli.config import Credentials, save_credentials
+
+        monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path))
+        path = save_credentials(Credentials(email="a@b.c", password="x"))
+        assert path.exists()
+        assert app.main(["logout"]) == 0
+        assert not path.exists()
+        assert "Cleared saved credentials" in capsys.readouterr().out
+
+    def test_logout_without_saved_credentials(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path))
+        assert app.main(["logout"]) == 0
+        assert "No saved credentials" in capsys.readouterr().out
+
+    def test_login_saves_credentials_when_prompted(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        import builtins
+        import getpass
+
+        from gradescope_cli.config import credentials_path, load_cached_credentials
+
+        monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path))
+        monkeypatch.delenv("GRADESCOPE_EMAIL", raising=False)
+        monkeypatch.delenv("GRADESCOPE_PASSWORD", raising=False)
+
+        class FakeRealClient:
+            email: str | None = None
+
+            def login(self, email: str, password: str) -> None:
+                self.email = email
+
+        monkeypatch.setattr(app, "GradescopeClient", FakeRealClient)
+        answers = iter(["student@ucsd.edu", "y"])  # email prompt, then save? [y/N]
+        monkeypatch.setattr(builtins, "input", lambda prompt="": next(answers))
+        monkeypatch.setattr(getpass, "getpass", lambda prompt="": "s3cret")
+
+        assert app.main(["login"]) == 0
+        saved = load_cached_credentials(credentials_path())
+        assert saved is not None
+        assert saved.email == "student@ucsd.edu"
+        assert saved.password == "s3cret"
+        assert "Saved credentials" in capsys.readouterr().out
+
     def test_tui_without_env_creds_defers_to_login_screen(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:

@@ -30,6 +30,16 @@ never echoed) when the variables are unset:
 uv run gradescope login --email you@ucsd.edu   # only asks for the password
 ```
 
+After a successful interactive login you'll be asked whether to **save the
+credentials** — they're cached at `~/.config/gradescope-cli/credentials.json`
+with `0600` (user-only) permissions, so you don't have to re-type them.
+Env vars always take precedence over the cache. The TUI login screen has a
+"Remember me" checkbox for the same thing. Forget them anytime with:
+
+```bash
+uv run gradescope logout
+```
+
 ## Usage
 
 ```bash

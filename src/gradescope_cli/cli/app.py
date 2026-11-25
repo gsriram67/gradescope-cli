@@ -20,7 +20,14 @@ from pathlib import Path
 
 from gradescope_cli.api.client import GradescopeAPI, GradescopeClient
 from gradescope_cli.api.models import AutograderResult, LeaderboardEntry
-from gradescope_cli.config import ENV_EMAIL, Credentials, load_credentials
+from gradescope_cli.config import (
+    ENV_EMAIL,
+    Credentials,
+    clear_cached_credentials,
+    credentials_path,
+    resolve_credentials,
+    save_credentials,
+)
 from gradescope_cli.exceptions import ConfigError, GradescopeError
 from gradescope_cli.render import due_text, score_text, status_label
 
@@ -109,6 +116,30 @@ def cmd_leaderboard(args: argparse.Namespace, client: GradescopeAPI) -> int:
     return 0
 
 
+def cmd_logout(args: argparse.Namespace, client: GradescopeAPI) -> int:
+    """Forget any saved credentials (does not need to sign in)."""
+    if clear_cached_credentials():
+        print(f"Cleared saved credentials ({credentials_path()}).")
+    else:
+        print("No saved credentials found.")
+    return 0
+
+
+def _maybe_save_credentials(creds: Credentials) -> None:
+    """After an interactive login, offer to cache the credentials (0600 file)."""
+    try:
+        answer = (
+            input(f"Save credentials to {credentials_path()} (file permissions 0600)? [y/N] ")
+            .strip()
+            .lower()
+        )
+    except (EOFError, KeyboardInterrupt):
+        return
+    if answer in {"y", "yes"}:
+        path = save_credentials(creds)
+        print(f"Saved credentials to {path}")
+
+
 def cmd_tui(args: argparse.Namespace, client: GradescopeAPI) -> int:
     from gradescope_cli.tui import GradescopeApp
 
@@ -132,6 +163,9 @@ def build_parser() -> argparse.ArgumentParser:
     )
     p.add_argument("--email", help="account email (skips the email prompt)")
     p.set_defaults(func=cmd_login, interactive_login=True)
+
+    p = sub.add_parser("logout", help="forget saved credentials")
+    p.set_defaults(func=cmd_logout)
 
     p = sub.add_parser("courses", help="list your courses")
     p.set_defaults(func=cmd_courses)
@@ -170,21 +204,27 @@ def main(argv: Sequence[str] | None = None, *, client: GradescopeAPI | None = No
     args = build_parser().parse_args(argv)
     try:
         if client is None:
-            # Only `login` prompts on the command line; the TUI has its own
-            # login screen, so for `tui` missing env vars are not an error.
-            interactive = bool(getattr(args, "interactive_login", False))
-            try:
-                creds: Credentials | None = load_credentials(
-                    interactive=interactive, email=getattr(args, "email", None)
-                )
-            except ConfigError:
-                if args.func is not cmd_tui:
-                    raise
-                creds = None
-            real_client = GradescopeClient()
-            if creds is not None:
-                real_client.login(creds.email, creds.password)
-            client = real_client
+            if args.func is cmd_logout:
+                client = GradescopeClient()  # logout needs no sign-in
+            else:
+                # Only `login` prompts on the command line; the TUI has its own
+                # login screen, so for `tui` missing credentials are not an error.
+                interactive = bool(getattr(args, "interactive_login", False))
+                creds: Credentials | None
+                try:
+                    creds, source = resolve_credentials(
+                        interactive=interactive, email=getattr(args, "email", None)
+                    )
+                except ConfigError:
+                    if args.func is not cmd_tui:
+                        raise
+                    creds, source = None, ""
+                real_client = GradescopeClient()
+                if creds is not None:
+                    real_client.login(creds.email, creds.password)
+                    if args.func is cmd_login and source == "prompt":
+                        _maybe_save_credentials(creds)
+                client = real_client
         result: int = args.func(args, client)
         return result
     except GradescopeError as exc:

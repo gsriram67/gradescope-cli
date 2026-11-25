@@ -7,6 +7,7 @@ workers so the UI never blocks; results are applied via call_from_thread.
 
 from __future__ import annotations
 
+import os
 import time
 from contextlib import suppress
 from datetime import datetime
@@ -22,6 +23,7 @@ from textual.css.query import NoMatches
 from textual.screen import ModalScreen, Screen
 from textual.widgets import (
     Button,
+    Checkbox,
     DataTable,
     Footer,
     Header,
@@ -39,7 +41,7 @@ from gradescope_cli.api.models import (
     LeaderboardEntry,
     Submission,
 )
-from gradescope_cli.exceptions import GradescopeError
+from gradescope_cli.exceptions import ConfigError, GradescopeError
 from gradescope_cli.render import (
     due_style,
     due_text,
@@ -129,6 +131,7 @@ class LoginScreen(GradescopeScreen):
             yield Input(id="email", placeholder="you@ucsd.edu")
             yield Label("Password")
             yield Input(id="password", password=True)
+            yield Checkbox("Remember me (save to ~/.config, 0600)", id="save")
             yield Button("Log In", id="login", variant="primary")
             yield Static(id="login-error")
         yield Footer()
@@ -136,6 +139,7 @@ class LoginScreen(GradescopeScreen):
     def __init__(self) -> None:
         super().__init__()
         self.error_text = ""
+        self._attempt: tuple[str, str] | None = None
 
     def on_mount(self) -> None:
         hint = cast("GradescopeApp", self.app).email_hint
@@ -161,6 +165,7 @@ class LoginScreen(GradescopeScreen):
 
     @work(thread=True)
     def login_worker(self, email: str, password: str) -> None:
+        self._attempt = (email, password)
         try:
             self.client.login(email, password)
         except GradescopeError as exc:
@@ -173,6 +178,19 @@ class LoginScreen(GradescopeScreen):
         self.query_one("#login-error", Static).update(message)
 
     def _on_success(self) -> None:
+        # "Remember me": cache credentials (0600) unless env vars already provide them.
+        if self.query_one("#save", Checkbox).value and self._attempt is not None:
+            from gradescope_cli.config import (
+                Credentials,
+                credentials_from_env,
+                save_credentials,
+            )
+
+            try:
+                credentials_from_env(dict(os.environ))
+            except ConfigError:
+                email, password = self._attempt
+                save_credentials(Credentials(email=email, password=password))
         self.app.switch_screen(CoursesScreen())
 
 
