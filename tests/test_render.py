@@ -31,6 +31,20 @@ class TestHumanize:
         assert render.due_style(NOW + timedelta(days=10), now=NOW) == ""  # fine
         assert render.due_style(None) == ""
 
+    def test_due_compact(self) -> None:
+        # NOW = 2026-11-24 12:00
+        assert render.due_compact(NOW - timedelta(days=39), now=NOW) == "10-16 12:00 · overdue 39d"
+        assert (
+            render.due_compact(NOW + timedelta(days=2, hours=3), now=NOW) == "11-26 15:00 · in 2d"
+        )
+        assert render.due_compact(None) == "-"
+
+    def test_humanize_short(self) -> None:
+        assert render.humanize_amount(timedelta(days=39), short=True) == "39d"
+        assert render.humanize_amount(timedelta(hours=5), short=True) == "5h"
+        assert render.humanize_amount(timedelta(minutes=12), short=True) == "12m"
+        assert render.humanize_amount(timedelta(seconds=30), short=True) == "now"
+
 
 class TestScore:
     def test_bar(self) -> None:

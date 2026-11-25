@@ -43,6 +43,7 @@ from gradescope_cli.api.models import (
 )
 from gradescope_cli.exceptions import ConfigError, GradescopeError
 from gradescope_cli.render import (
+    due_compact,
     due_style,
     due_text,
     score_bar,
@@ -60,16 +61,16 @@ POLL_TIMEOUT = 600.0
 
 
 def due_cell(due: datetime | None) -> Text:
-    """Styled due-date cell with a relative hint ("in 2 days" / "overdue 3 days")."""
+    """Styled compact due-date cell ("10-13 05:00 · overdue 39d")."""
     now = datetime.now()
-    return Text(due_text(due, now=now), style=due_style(due, now=now))
+    return Text(due_compact(due, now=now), style=due_style(due, now=now))
 
 
-def score_cell(score: float | None, max_score: float | None) -> Text:
+def score_cell(score: float | None, max_score: float | None, bar_width: int = 8) -> Text:
     """Styled score cell: colored bar + "8.5/10 (85%)"."""
     if score is None or max_score is None:
         return Text("-", style="dim")
-    bar = Text(f"{score_bar(score, max_score)} {score_text(score, max_score)}")
+    bar = Text(f"{score_bar(score, max_score, width=bar_width)} {score_text(score, max_score)}")
     bar.stylize(score_style(score, max_score))
     return bar
 
@@ -295,11 +296,11 @@ class AssignmentsScreen(GradescopeScreen):
     def on_mount(self) -> None:
         self._default_hint = str(self.query_one(".hint", Static).content)
         table = self.query_one(DataTable)
-        table.add_column("ID", key="id", width=10)
+        table.add_column("ID", key="id", width=9)
         table.add_column("Assignment", key="title")
-        table.add_column("Due", key="due", width=18)
-        table.add_column("Status", key="status", width=10)
-        table.add_column("Score", key="score", width=22)
+        table.add_column("Due", key="due", width=24)
+        table.add_column("Status", key="status", width=9)
+        table.add_column("Score", key="score", width=23)
         self.set_hint(f"loading assignments for {self.course.name}...")
         self.reload_assignments()
 
@@ -409,12 +410,12 @@ class AssignmentScreen(GradescopeScreen):
         submissions = self.query_one("#submissions", DataTable)
         submissions.add_column("Submission", key="id", width=12)
         submissions.add_column("Submitted", key="when")
-        submissions.add_column("Score", key="score", width=22)
+        submissions.add_column("Score", key="score", width=23)
         cases = self.query_one("#cases", DataTable)
         cases.display = False
         cases.add_column("Test case", key="name")
         cases.add_column("Result", key="result", width=9)
-        cases.add_column("Score", key="score", width=22)
+        cases.add_column("Score", key="score", width=23)
         self.load_submissions_worker()
         submissions.focus()
         if self._submit_paths is not None:

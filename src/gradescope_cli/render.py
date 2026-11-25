@@ -33,22 +33,22 @@ def fmt_due(due: datetime | None) -> str:
     return due.strftime("%Y-%m-%d %H:%M") if due is not None else "-"
 
 
-def humanize_amount(delta: timedelta) -> str:
-    """Humanize a duration: "3 days", "5 hours", "12 minutes", "just now"."""
+def humanize_amount(delta: timedelta, *, short: bool = False) -> str:
+    """Humanize a duration: "3 days"/"3d", "5 hours"/"5h", "just now"/"now"."""
     seconds = abs(delta.total_seconds())
     if seconds < 60:
-        return "just now"
+        return "now" if short else "just now"
     minutes = seconds / 60
     if minutes < 60:
         n = int(minutes)
-        return f"{n} minute{'s' if n != 1 else ''}"
+        return f"{n}m" if short else f"{n} minute{'s' if n != 1 else ''}"
     hours = minutes / 60
     if hours < 24:
         n = int(hours)
-        return f"{n} hour{'s' if n != 1 else ''}"
+        return f"{n}h" if short else f"{n} hour{'s' if n != 1 else ''}"
     days = hours / 24
     n = int(days)
-    return f"{n} day{'s' if n != 1 else ''}"
+    return f"{n}d" if short else f"{n} day{'s' if n != 1 else ''}"
 
 
 def due_text(due: datetime | None, *, now: datetime | None = None) -> str:
@@ -61,6 +61,19 @@ def due_text(due: datetime | None, *, now: datetime | None = None) -> str:
     if delta.total_seconds() < 0:
         return f"{base} · overdue {humanize_amount(-delta)}"
     return f"{base} · in {humanize_amount(delta)}"
+
+
+def due_compact(due: datetime | None, *, now: datetime | None = None) -> str:
+    """Compact due text for narrow tables: ``10-13 05:00 · overdue 39d``."""
+    if due is None:
+        return "-"
+    now = now or datetime.now()
+    delta = due - now
+    if delta.total_seconds() < 0:
+        rel = f"overdue {humanize_amount(-delta, short=True)}"
+    else:
+        rel = f"in {humanize_amount(delta, short=True)}"
+    return f"{due:%m-%d %H:%M} · {rel}"
 
 
 def due_style(due: datetime | None, *, now: datetime | None = None) -> str:
