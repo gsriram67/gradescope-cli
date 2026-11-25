@@ -9,8 +9,9 @@ from pathlib import Path
 from typing import Any
 
 import pytest
+from textual.css.query import NoMatches
 from textual.pilot import Pilot
-from textual.widgets import DataTable, Input, Static
+from textual.widgets import DataTable, Input, Static, Tree
 
 from gradescope_cli.api.models import Course
 from gradescope_cli.exceptions import AuthError
@@ -49,6 +50,20 @@ def make_app(*, authenticated: bool = True) -> tuple[GradescopeApp, FakeClient]:
 
 def table_rows(app: GradescopeApp) -> int:
     return app.screen.query_one(DataTable).row_count
+
+
+def rows_loaded(app: GradescopeApp, n: int = 2) -> bool:
+    """True when the current screen's list has n entries (Tree terms or table rows)."""
+    if isinstance(app.screen, CoursesScreen):
+        try:
+            tree = app.screen.query_one("#courses-tree", Tree)
+        except NoMatches:
+            return False
+        return len(tree.root.children) == n
+    try:
+        return app.screen.query_one(DataTable).row_count == n
+    except NoMatches:
+        return False
 
 
 class FailingLoginClient(FakeClient):
@@ -97,7 +112,7 @@ def test_login_flow_then_courses() -> None:
             screen.query_one("#password", Input).value = "hunter2"
             await pilot.press("enter")
             await wait_for(pilot, lambda: isinstance(app.screen, CoursesScreen))
-            await wait_for(pilot, lambda: table_rows(app) == 2)
+            await wait_for(pilot, lambda: rows_loaded(app))
             assert ("login", ("student@ucsd.edu", "hunter2")) in client.calls
             assert client.is_authenticated
 
@@ -158,7 +173,7 @@ def test_authenticated_client_skips_login_screen() -> None:
     async def go() -> None:
         async with app.run_test() as pilot:
             await wait_for(pilot, lambda: isinstance(app.screen, CoursesScreen))
-            await wait_for(pilot, lambda: table_rows(app) == 2)
+            await wait_for(pilot, lambda: rows_loaded(app))
 
     run(go())
 
@@ -184,7 +199,8 @@ def test_empty_courses_shows_visible_hint() -> None:
                     and "No courses found" in str(app.screen.query_one(".hint", Static).content)
                 ),
             )
-            assert table_rows(app) == 0
+            tree = app.screen.query_one("#courses-tree", Tree)
+            assert len(tree.root.children) == 0
 
     run(go())
 
@@ -194,8 +210,39 @@ def test_courses_screen_lists_courses() -> None:
 
     async def go() -> None:
         async with app.run_test() as pilot:
-            await wait_for(pilot, lambda: table_rows(app) == 2)
+            await wait_for(pilot, lambda: rows_loaded(app))
             assert isinstance(app.screen, CoursesScreen)
+
+    run(go())
+
+
+def test_term_sections_fold_and_unfold() -> None:
+    app, _ = make_app()
+
+    async def go() -> None:
+        async with app.run_test() as pilot:
+            await wait_for(pilot, lambda: rows_loaded(app))
+            tree = app.screen.query_one("#courses-tree", Tree)
+            term_node = tree.root.children[0]
+            assert term_node.is_expanded
+            await pilot.press("down")  # cursor -> first term node (line 0)
+            await pilot.press("enter")  # fold
+            await wait_for(pilot, lambda: not term_node.is_expanded)
+            await pilot.press("enter")  # unfold again
+            await wait_for(pilot, lambda: term_node.is_expanded)
+
+    run(go())
+
+
+def test_click_course_in_tree_opens_it() -> None:
+    app, _ = make_app()
+
+    async def go() -> None:
+        async with app.run_test(size=(100, 30)) as pilot:
+            await wait_for(pilot, lambda: rows_loaded(app))
+            # second line of the tree = first course under the first term
+            await pilot.click("#courses-tree", offset=(10, 1))
+            await wait_for(pilot, lambda: isinstance(app.screen, AssignmentsScreen))
 
     run(go())
 
@@ -205,7 +252,8 @@ def test_navigate_to_assignments() -> None:
 
     async def go() -> None:
         async with app.run_test() as pilot:
-            await wait_for(pilot, lambda: table_rows(app) == 2)
+            await wait_for(pilot, lambda: rows_loaded(app))
+            await pilot.press("down", "down")  # -> first course node (line 1)
             await pilot.press("enter")  # open first course
             await wait_for(
                 pilot,
@@ -232,7 +280,8 @@ def test_click_opens_assignment() -> None:
 
     async def go() -> None:
         async with app.run_test(size=(100, 30)) as pilot:
-            await wait_for(pilot, lambda: table_rows(app) == 2)  # courses
+            await wait_for(pilot, lambda: rows_loaded(app))  # courses
+            await pilot.press("down", "down")  # -> first course node
             await pilot.press("enter")
             await wait_for(pilot, lambda: isinstance(app.screen, AssignmentsScreen))
             await wait_for(pilot, lambda: table_rows(app) == 2)  # assignments
@@ -247,11 +296,12 @@ def test_open_assignment_and_leaderboard() -> None:
 
     async def go() -> None:
         async with app.run_test() as pilot:
-            await wait_for(pilot, lambda: table_rows(app) == 2)
+            await wait_for(pilot, lambda: rows_loaded(app))
+            await pilot.press("down", "down")  # -> first course node
             await pilot.press("enter")
             await wait_for(pilot, lambda: isinstance(app.screen, AssignmentsScreen))
-            await wait_for(pilot, lambda: table_rows(app) == 2)
-            await pilot.press("enter")  # open first assignment
+            await wait_for(pilot, lambda: table_rows(app) == 2)  # assignments table
+            await pilot.press("enter")  # open first assignment (cursor on row 0)
             await wait_for(pilot, lambda: isinstance(app.screen, AssignmentScreen))
             await pilot.press("l")  # leaderboard
             await wait_for(
@@ -275,7 +325,8 @@ def test_assignment_screen_lists_and_tracks_submissions() -> None:
 
     async def go() -> None:
         async with app.run_test() as pilot:
-            await wait_for(pilot, lambda: table_rows(app) == 2)  # courses
+            await wait_for(pilot, lambda: rows_loaded(app))  # courses
+            await pilot.press("down", "down")  # -> first course node
             await pilot.press("enter")
             await wait_for(pilot, lambda: isinstance(app.screen, AssignmentsScreen))
             await wait_for(pilot, lambda: table_rows(app) == 2)  # assignments
@@ -303,7 +354,8 @@ def test_submit_flow_watches_autograder(tmp_path: Path) -> None:
 
     async def go() -> None:
         async with app.run_test() as pilot:
-            await wait_for(pilot, lambda: table_rows(app) == 2)
+            await wait_for(pilot, lambda: rows_loaded(app))
+            await pilot.press("down", "down")  # -> first course node
             await pilot.press("enter")  # course 111
             await wait_for(pilot, lambda: isinstance(app.screen, AssignmentsScreen))
             await wait_for(pilot, lambda: table_rows(app) == 2)
@@ -331,7 +383,8 @@ def test_submit_modal_rejects_missing_files(tmp_path: Path) -> None:
 
     async def go() -> None:
         async with app.run_test() as pilot:
-            await wait_for(pilot, lambda: table_rows(app) == 2)
+            await wait_for(pilot, lambda: rows_loaded(app))
+            await pilot.press("down", "down")  # -> first course node
             await pilot.press("enter")
             await wait_for(pilot, lambda: isinstance(app.screen, AssignmentsScreen))
             await wait_for(pilot, lambda: table_rows(app) == 2)
@@ -352,10 +405,12 @@ def test_autograder_status_via_submission_id_modal() -> None:
 
     async def go() -> None:
         async with app.run_test() as pilot:
-            await wait_for(pilot, lambda: table_rows(app) == 2)
+            await wait_for(pilot, lambda: rows_loaded(app))
+            await pilot.press("down", "down")  # -> first course node
             await pilot.press("enter")
             await wait_for(pilot, lambda: isinstance(app.screen, AssignmentsScreen))
-            await wait_for(pilot, lambda: table_rows(app) == 2)
+            await wait_for(pilot, lambda: rows_loaded(app))
+            await pilot.press("down", "down")  # -> first course node
             await pilot.press("enter")
             await wait_for(pilot, lambda: isinstance(app.screen, AssignmentScreen))
             screen = app.screen

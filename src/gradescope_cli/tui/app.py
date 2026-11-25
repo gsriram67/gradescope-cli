@@ -47,6 +47,9 @@ class GradescopeApp(App[None]):
     DataTable {
         height: 1fr;
     }
+    Tree {
+        height: 1fr;
+    }
     """
 
     def __init__(self, client: GradescopeAPI, *, email_hint: str | None = None) -> None:

@@ -12,7 +12,7 @@ import time
 from contextlib import suppress
 from datetime import datetime
 from pathlib import Path
-from typing import TYPE_CHECKING, cast
+from typing import TYPE_CHECKING, Any, cast
 
 from rich.text import Text
 from textual import on, work
@@ -31,6 +31,7 @@ from textual.widgets import (
     Label,
     ProgressBar,
     Static,
+    Tree,
 )
 
 from gradescope_cli.api.client import GradescopeAPI
@@ -197,7 +198,11 @@ class LoginScreen(GradescopeScreen):
 
 
 class CoursesScreen(GradescopeScreen):
-    """Lists all courses; enter opens one."""
+    """Courses grouped under foldable term sections (a Tree).
+
+    Click a term's ▸ (or press enter on it) to fold/unfold; enter/click a
+    course to open it.
+    """
 
     BINDINGS = [
         Binding("r", "reload", "Refresh"),
@@ -206,23 +211,24 @@ class CoursesScreen(GradescopeScreen):
 
     def __init__(self) -> None:
         super().__init__()
-        self._courses: dict[str, Course] = {}
         self._default_hint = ""
 
     def compose(self) -> ComposeResult:
         yield Header()
-        yield Static("Courses  (enter: open · r: refresh · q: quit)", classes="hint")
-        yield RowClickTable(cursor_type="row")
+        yield Static(
+            "Courses  (click ▸ or enter on a term: fold/unfold · enter/click a course: open · "
+            "r: refresh · q: quit)",
+            classes="hint",
+        )
+        yield Tree("Courses", id="courses-tree")
         yield Footer()
 
     def on_mount(self) -> None:
         self._default_hint = str(self.query_one(".hint", Static).content)
-        table = self.query_one(DataTable)
-        table.add_column("ID", key="id", width=10)
-        table.add_column("Term", key="term", width=12)
-        table.add_column("Course", key="name")
-        table.add_column("Code", key="code", width=12)
-        table.add_column("Asg", key="count", width=5)
+        tree = self.query_one("#courses-tree", Tree)
+        tree.show_root = False
+        tree.auto_expand = False  # we toggle term nodes ourselves in on_node_selected
+        tree.focus()
         self.set_hint("loading courses...")
         self.reload_courses()
 
@@ -236,22 +242,20 @@ class CoursesScreen(GradescopeScreen):
         self.app.call_from_thread(self.populate_courses, courses)
 
     def populate_courses(self, courses: list[Course]) -> None:
-        table = self.query_one(DataTable)
-        table.clear()
-        self._courses = {}
+        tree = self.query_one("#courses-tree", Tree)
+        tree.clear()
+        # group by term, preserving the client's term-descending order
+        by_term: dict[str, list[Course]] = {}
         for course in courses:
-            table.add_row(
-                Text(course.id),
-                Text(course.term or "-", style="dim"),
-                Text(course.name, style="bold"),
-                Text(course.code or "", style="dim"),
-                Text(
-                    str(course.num_assignments) if course.num_assignments is not None else "-",
-                    style="dim",
-                ),
-                key=course.id,
-            )
-            self._courses[course.id] = course
+            by_term.setdefault(course.term or "Other", []).append(course)
+        for term, term_courses in by_term.items():
+            term_node = tree.root.add(f"{term}  ({len(term_courses)})", data=("term", term))
+            for course in term_courses:
+                label = f"{course.code + ' — ' if course.code else ''}{course.name}  [{course.id}]"
+                if course.num_assignments is not None:
+                    label += f"  ({course.num_assignments} asg)"
+                term_node.add(Text(label), data=course)
+            term_node.expand()
         if not courses:
             self.set_hint("No courses found — are you enrolled? (r: retry · q: quit)")
         else:
@@ -260,11 +264,13 @@ class CoursesScreen(GradescopeScreen):
     def action_reload(self) -> None:
         self.reload_courses()
 
-    @on(DataTable.RowSelected)
-    def open_course(self, event: DataTable.RowSelected) -> None:
-        course = self._courses.get(str(event.row_key.value))
-        if course is not None:
-            self.app.push_screen(AssignmentsScreen(course))
+    @on(Tree.NodeSelected)
+    def on_node_selected(self, event: Tree.NodeSelected[Any]) -> None:
+        data = event.node.data
+        if isinstance(data, Course):
+            self.app.push_screen(AssignmentsScreen(data))
+        elif isinstance(data, tuple) and data[0] == "term":
+            event.node.toggle()  # fold/unfold a term section via keyboard too
 
 
 class AssignmentsScreen(GradescopeScreen):

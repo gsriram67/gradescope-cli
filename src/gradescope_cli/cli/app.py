@@ -20,7 +20,7 @@ from collections.abc import Callable, Sequence
 from pathlib import Path
 
 from gradescope_cli.api.client import GradescopeAPI, GradescopeClient
-from gradescope_cli.api.models import AutograderResult, LeaderboardEntry
+from gradescope_cli.api.models import AutograderResult, Course, LeaderboardEntry
 from gradescope_cli.config import (
     ENV_EMAIL,
     Credentials,
@@ -62,11 +62,15 @@ def cmd_courses(args: argparse.Namespace, client: GradescopeAPI) -> int:
     if not courses:
         print("No courses found.")
         return 0
-    width = max(len(c.name) for c in courses)
+    by_term: dict[str, list[Course]] = {}
     for course in courses:
-        code = f" ({course.code})" if course.code else ""
-        term = course.term or "-"
-        print(f"{course.id:>8}  {term:<12}  {course.name:<{width}}{code}")
+        by_term.setdefault(course.term or "Other", []).append(course)
+    width = max(len(c.name) for c in courses)
+    for term, term_courses in by_term.items():
+        print(f"\n{term} ({len(term_courses)}):")
+        for course in term_courses:
+            code = f" ({course.code})" if course.code else ""
+            print(f"  {course.id:>8}  {course.name:<{width}}{code}")
     return 0
 
 
