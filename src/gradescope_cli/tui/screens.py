@@ -247,15 +247,16 @@ class CoursesScreen(GradescopeScreen):
         by_term: dict[str, list[Course]] = {}
         for course in courses:
             by_term.setdefault(course.term or "Other", []).append(course)
-        for term, term_courses in by_term.items():
-            term_label = Text(term, style="bold")
+        # pad names so the [id] / asg columns line up (tabular feel), capped
+        name_width = min(55, max((len(c.name) for c in courses), default=0))
+        for term_index, (term, term_courses) in enumerate(by_term.items()):
+            # most recent term gets a highlight color; older terms stay bold
+            term_label = Text(term, style="bold green" if term_index == 0 else "bold")
             term_label.append(f"  ({len(term_courses)})", style="dim")
             term_node = tree.root.add(term_label, data=("term", term))
             for course in term_courses:
-                label = Text(course.name)
-                if course.code and course.code not in course.name:
-                    label.append(f"  {course.code}", style="dim")
-                label.append(f"  [{course.id}]", style="dim")
+                label = Text(f"{course.name:<{name_width}}")
+                label.append(f"  [{course.id}]", style="cyan")
                 if course.num_assignments is not None:
                     label.append(f" · {course.num_assignments} asg", style="dim")
                 term_node.add(label, data=course)

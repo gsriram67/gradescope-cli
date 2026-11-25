@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import Any
 
 import pytest
+from rich.text import Text
 from textual.css.query import NoMatches
 from textual.pilot import Pilot
 from textual.widgets import DataTable, Input, Static, Tree
@@ -225,6 +226,12 @@ def test_term_sections_fold_and_unfold() -> None:
             tree = app.screen.query_one("#courses-tree", Tree)
             term_node = tree.root.children[0]
             assert term_node.is_expanded
+            # current (first) term is highlighted green; course ids are cyan
+            label = term_node.label
+            assert isinstance(label, Text)
+            assert "green" in str(label.style)
+            course_label = str(term_node.children[0].label)
+            assert "[111]" in course_label
             await pilot.press("down")  # cursor -> first term node (line 0)
             await pilot.press("enter")  # fold
             await wait_for(pilot, lambda: not term_node.is_expanded)
