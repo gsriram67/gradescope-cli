@@ -176,7 +176,8 @@ class TestSubmit:
         assert submission.id == "999"
         assert submission.url == "/courses/111/assignments/777/submissions/999"
         post = session.last_request("POST")
-        assert post["data"]["authenticity_token"] == "tok-submit-456"
+        # CSRF token goes in the X-CSRF-Token header (from the csrf-token meta tag)
+        assert post["headers"]["X-CSRF-Token"] == "tok-meta-789"
         files = post["files"]
         assert [name for _, (name, _) in files] == ["solution.py", "notes.txt"]
 

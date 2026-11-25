@@ -153,7 +153,9 @@ ASSIGNMENTS_PAGE = """
 """
 
 ASSIGNMENT_PAGE = """
-<html><body>
+<html><head>
+  <meta name="csrf-token" content="tok-meta-789" />
+</head><body>
   <form action="/courses/111/assignments/777/submissions" method="post"
         enctype="multipart/form-data">
     <input type="hidden" name="authenticity_token" value="tok-submit-456" />

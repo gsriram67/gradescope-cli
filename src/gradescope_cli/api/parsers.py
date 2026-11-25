@@ -83,6 +83,20 @@ def extract_csrf_token(html: str) -> str:
     return str(tag["value"])
 
 
+def extract_csrf_meta(html: str) -> str:
+    """Extract the ``<meta name="csrf-token">`` token.
+
+    Sent as the ``X-CSRF-Token`` header on POSTs (this is what Gradescope's own
+    Dropzone uploader does); the per-form ``authenticity_token`` input is
+    scoped to its form's action and gets rejected (422) elsewhere.
+    """
+    soup = BeautifulSoup(html, "html.parser")
+    tag = soup.find("meta", attrs={"name": "csrf-token"})
+    if tag is None or not tag.get("content"):
+        raise ParseError("could not find csrf-token meta tag in page")
+    return str(tag["content"])
+
+
 def _assignment_href(course_id: str) -> re.Pattern[str]:
     """Matches assignment links, including ``/assignments/<id>/submissions/<sid>``
     (past assignments on the student dashboard link straight to the latest

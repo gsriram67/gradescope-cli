@@ -252,7 +252,9 @@ class GradescopeClient:
         if not files:
             raise ValueError("at least one file is required to submit")
         page = self._get(f"/courses/{course_id}/assignments/{assignment_id}")
-        token = parsers.extract_csrf_token(page.text)
+        # CSRF via the page's csrf-token meta as an X-CSRF-Token header — the
+        # form's per-form authenticity_token input is rejected (422) here.
+        token = parsers.extract_csrf_meta(page.text)
         path = f"/courses/{course_id}/assignments/{assignment_id}/submissions"
         with ExitStack() as stack:
             file_tuples: list[tuple[str, tuple[str, Any]]] = []
@@ -262,7 +264,7 @@ class GradescopeClient:
                 file_tuples.append(("submission[files][]", (path_obj.name, handle)))
             resp = self._session.post(
                 self._url(path),
-                data={"authenticity_token": token},
+                headers={"X-CSRF-Token": token},
                 files=file_tuples,
                 timeout=self.timeout,
                 allow_redirects=False,

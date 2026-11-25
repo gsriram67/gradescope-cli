@@ -30,6 +30,11 @@ class TestExtractCsrfToken:
         with pytest.raises(ParseError):
             parsers.extract_csrf_token("<html><body>no form</body></html>")
 
+    def test_csrf_meta_tag(self) -> None:
+        assert parsers.extract_csrf_meta(ASSIGNMENT_PAGE) == "tok-meta-789"
+        with pytest.raises(ParseError):
+            parsers.extract_csrf_meta("<html></html>")
+
 
 class TestParseDueDate:
     NOW = datetime(2026, 11, 18, 12, 0)
