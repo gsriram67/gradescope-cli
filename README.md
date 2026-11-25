@@ -1,5 +1,7 @@
 # gradescope-cli
 
+> 📖 Project website (GitHub Pages): see `docs/` — deployed from this repo's `docs/` folder.
+
 A TUI for [Gradescope](https://www.gradescope.com):
 
 - sign in with your Gradescope account (regular email + password, not SSO)

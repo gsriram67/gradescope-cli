@@ -1,0 +1,3 @@
+title: gradescope-cli
+description: A terminal UI for Gradescope — browse courses and assignments, submit code, track the autograder, and view leaderboards.
+theme: jekyll-theme-cayman
