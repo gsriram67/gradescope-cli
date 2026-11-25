@@ -364,6 +364,56 @@ def test_click_opens_assignment() -> None:
     run(go())
 
 
+def test_filter_assignments() -> None:
+    """Press / and type to filter the assignments table; esc clears."""
+    app, _ = make_app()
+
+    async def go() -> None:
+        async with app.run_test(size=(110, 30)) as pilot:
+            await wait_for(pilot, lambda: rows_loaded(app))
+            await pilot.press("down", "down", "enter")  # open course 111
+            await wait_for(pilot, lambda: isinstance(app.screen, AssignmentsScreen))
+            await wait_for(pilot, lambda: table_rows(app) == 2)
+            await pilot.press("/")
+            await wait_for(pilot, lambda: app.screen.query_one("#filter", Input).display)
+            await pilot.press(*"homework 1")
+            await wait_for(pilot, lambda: table_rows(app) == 1)
+            row = app.screen.query_one(DataTable).get_row_at(0)
+            assert "Homework 1" in str(row[1])
+            await pilot.press("escape")  # clear filter
+            await wait_for(pilot, lambda: table_rows(app) == 2)
+
+    run(go())
+
+
+def test_filter_leaderboard_by_name() -> None:
+    app, _ = make_app()
+
+    async def go() -> None:
+        async with app.run_test(size=(110, 30)) as pilot:
+            await wait_for(pilot, lambda: rows_loaded(app))
+            await pilot.press("down", "down", "enter")  # course
+            await wait_for(pilot, lambda: isinstance(app.screen, AssignmentsScreen))
+            await wait_for(pilot, lambda: table_rows(app) == 2)
+            await pilot.press("enter")  # open assignment
+            await wait_for(pilot, lambda: isinstance(app.screen, AssignmentScreen))
+            await pilot.press("l")  # leaderboard
+            await wait_for(
+                pilot, lambda: isinstance(app.screen, LeaderboardScreen) and table_rows(app) == 2
+            )
+            await pilot.press("/")
+            await pilot.press(*"alice")
+            await wait_for(pilot, lambda: table_rows(app) == 1)
+            row = app.screen.query_one(DataTable).get_row_at(0)
+            assert "Alice" in str(row[1])
+            # enter keeps the filter and closes the input
+            await pilot.press("enter")
+            await wait_for(pilot, lambda: not app.screen.query_one("#filter", Input).display)
+            assert table_rows(app) == 1
+
+    run(go())
+
+
 def test_open_assignment_and_leaderboard() -> None:
     app, _ = make_app()
 

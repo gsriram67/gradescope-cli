@@ -64,7 +64,8 @@ Keys:
 
 - login: type email/password, `enter` or click "Log In" · `q` quit
 - courses (grouped under foldable term sections): `enter`/click a course to open · `enter`/click a term (or its ▸) to fold/unfold · `r` refresh · `q` quit
-- assignments (due date, status, score bar): `enter` open · `s` submit files · `l` leaderboard · `r` refresh · `esc` back
+- assignments (due date, status, score): `j/k` move · `enter` open · `s` submit · `l` leaderboard · `/` filter by name · `r` refresh · `h`/`esc` back
+- leaderboard (per-category columns + total): `j/k` move · `/` filter by name · `r` refresh · `h`/`esc` back
 - assignment (progress bar + per-test-case bars + your submissions):
   `enter` on a submission tracks its autograder · `s` submit files · `g` autograder status · `l` leaderboard · `esc` back
   (submitting automatically watches the autograder until it finishes)

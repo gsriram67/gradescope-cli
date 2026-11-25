@@ -95,6 +95,37 @@ class GradescopeScreen(Screen[None]):
         with suppress(NoMatches):
             self.query_one(".hint", Static).update(message)
 
+    # -- filtering (press /) -------------------------------------------------
+
+    def filter_input(self) -> Input:
+        return self.query_one("#filter", Input)
+
+    def action_search(self) -> None:
+        """Open the filter input (bound to /)."""
+        f = self.filter_input()
+        f.display = True
+        f.focus()
+        self.set_hint(f"filter: «{f.value}» — enter: keep · esc: clear")
+
+    def filter_open(self) -> bool:
+        with suppress(NoMatches):
+            return self.filter_input().display
+        return False
+
+    def close_filter(self, *, clear: bool) -> None:
+        f = self.filter_input()
+        if clear:
+            f.value = ""  # triggers Input.Changed -> repopulate unfiltered
+        f.display = False
+        self.set_hint(getattr(self, "_default_hint", ""))
+        with suppress(NoMatches):
+            self.query_one(DataTable).focus()
+
+    def filter_query(self) -> str:
+        with suppress(NoMatches):
+            return self.filter_input().value.strip().lower()
+        return ""
+
 
 class LoginScreen(GradescopeScreen):
     """Sign in with a regular Gradescope account (email + password, not SSO)."""
@@ -282,6 +313,7 @@ class AssignmentsScreen(GradescopeScreen):
     BINDINGS = [
         Binding("s", "submit", "Submit files"),
         Binding("l", "leaderboard", "Leaderboard"),
+        Binding("/", "search", "Filter"),
         Binding("r", "reload", "Refresh"),
         Binding("escape", "back", "Back"),
         Binding("h", "back", "Back", show=False),
@@ -290,6 +322,7 @@ class AssignmentsScreen(GradescopeScreen):
     def __init__(self, course: Course) -> None:
         super().__init__()
         self.course = course
+        self._all_assignments: list[Assignment] = []
         self._assignments: dict[str, Assignment] = {}
         self._default_hint = ""
 
@@ -297,10 +330,11 @@ class AssignmentsScreen(GradescopeScreen):
         yield Header()
         yield Static(
             f"{self.course.name} (course {self.course.id}) — "
-            "j/k: move · enter: open · s: submit · l: leaderboard · r: refresh · h/esc: back",
+            "j/k: move · enter: open · s: submit · l: lb · /: filter · r · h/esc: back",
             classes="hint",
         )
         yield RowClickTable(cursor_type="row")
+        yield Input(id="filter", placeholder="filter assignments… (enter: keep · esc: clear)")
         yield Footer()
 
     def on_mount(self) -> None:
@@ -318,6 +352,32 @@ class AssignmentsScreen(GradescopeScreen):
         self.app.call_from_thread(self.populate_assignments, assignments)
 
     def populate_assignments(self, assignments: list[Assignment]) -> None:
+        self._all_assignments = assignments
+        self._apply_assignment_filter()
+        self._populate_assignment_table()
+
+    def _apply_assignment_filter(self) -> None:
+        q = self.filter_query()
+        shown = [
+            a
+            for a in self._all_assignments
+            if not q or q in a.title.lower() or q in a.id or q in (a.status or "").lower()
+        ]
+        self._assignments = {a.id: a for a in shown}
+        self._shown_assignments = shown
+
+    @on(Input.Changed, "#filter")
+    def _on_filter_changed(self, event: Input.Changed) -> None:
+        del event
+        self._apply_assignment_filter()
+        self._populate_assignment_table()
+
+    @on(Input.Submitted, "#filter")
+    def _on_filter_submitted(self) -> None:
+        self.close_filter(clear=False)
+
+    def _populate_assignment_table(self) -> None:
+        assignments = getattr(self, "_shown_assignments", [])
         table = self.query_one(DataTable)
         table.clear(columns=True)
         # Size the Due/Score columns to their content, widening when the
@@ -340,7 +400,6 @@ class AssignmentsScreen(GradescopeScreen):
         table.add_column("Due", key="due", width=due_w)
         table.add_column("Status", key="status", width=9)
         table.add_column("Score", key="score", width=score_w)
-        self._assignments = {}
         for assignment in assignments:
             table.add_row(
                 Text(assignment.id),
@@ -350,9 +409,11 @@ class AssignmentsScreen(GradescopeScreen):
                 score_cell(assignment.score, assignment.max_score),
                 key=assignment.id,
             )
-            self._assignments[assignment.id] = assignment
         if not assignments:
-            self.set_hint("No assignments found. (r: retry · esc: back)")
+            if self._all_assignments and self.filter_open() or self.filter_query():
+                self.set_hint("No assignments match the filter. (esc: clear · r: retry)")
+            else:
+                self.set_hint("No assignments found. (r: retry · h/esc: back)")
         else:
             self.set_hint(self._default_hint)
 
@@ -360,6 +421,9 @@ class AssignmentsScreen(GradescopeScreen):
         self.reload_assignments()
 
     def action_back(self) -> None:
+        if self.filter_open():
+            self.close_filter(clear=True)
+            return
         self.app.pop_screen()
 
     def current_assignment(self) -> Assignment | None:
@@ -582,6 +646,7 @@ class LeaderboardScreen(GradescopeScreen):
 
     BINDINGS = [
         Binding("r", "reload", "Refresh"),
+        Binding("/", "search", "Filter"),
         Binding("escape", "back", "Back"),
         Binding("h", "back", "Back", show=False),
     ]
@@ -590,15 +655,17 @@ class LeaderboardScreen(GradescopeScreen):
         super().__init__()
         self.course = course
         self.assignment = assignment
+        self._all_entries: list[LeaderboardEntry] = []
         self._default_hint = ""
 
     def compose(self) -> ComposeResult:
         yield Header()
         yield Static(
-            f"Leaderboard — {self.assignment.title} (j/k: move · r: refresh · h/esc: back)",
+            f"Leaderboard — {self.assignment.title} (j/k · /: filter · r · h/esc: back)",
             classes="hint",
         )
         yield RowClickTable(cursor_type="row")
+        yield Input(id="filter", placeholder="filter names… (enter: keep · esc: clear)")
         yield Footer()
 
     def on_mount(self) -> None:
@@ -616,6 +683,21 @@ class LeaderboardScreen(GradescopeScreen):
         self.app.call_from_thread(self.populate, entries)
 
     def populate(self, entries: list[LeaderboardEntry]) -> None:
+        self._all_entries = entries
+        q = self.filter_query()
+        shown = [e for e in entries if not q or q in e.name.lower()]
+        self._populate_table(shown)
+
+    @on(Input.Changed, "#filter")
+    def _on_filter_changed(self, event: Input.Changed) -> None:
+        del event
+        self.populate(self._all_entries)
+
+    @on(Input.Submitted, "#filter")
+    def _on_filter_submitted(self) -> None:
+        self.close_filter(clear=False)
+
+    def _populate_table(self, entries: list[LeaderboardEntry]) -> None:
         table = self.query_one(DataTable)
         table.clear(columns=True)
         table.add_column("Rank", key="rank", width=6)
@@ -643,7 +725,10 @@ class LeaderboardScreen(GradescopeScreen):
             row.append(Text(fmt_number(entry.score), style=rank_style))
             table.add_row(*row, key=str(entry.rank))
         if not entries:
-            self.set_hint("No leaderboard entries. (r: retry · esc: back)")
+            if self._all_entries and self.filter_query():
+                self.set_hint("No names match the filter. (esc: clear · r: retry)")
+            else:
+                self.set_hint("No leaderboard entries. (r: retry · h/esc: back)")
         else:
             self.set_hint(self._default_hint)
 
@@ -651,6 +736,9 @@ class LeaderboardScreen(GradescopeScreen):
         self.reload()
 
     def action_back(self) -> None:
+        if self.filter_open():
+            self.close_filter(clear=True)
+            return
         self.app.pop_screen()
 
 

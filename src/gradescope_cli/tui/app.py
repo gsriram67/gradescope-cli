@@ -57,6 +57,11 @@ class GradescopeApp(App[None]):
     Tree .tree--label {
         padding: 0 1;
     }
+    #filter {
+        display: none;
+        height: 3;
+        padding: 0 2;
+    }
     """
 
     def __init__(self, client: GradescopeAPI, *, email_hint: str | None = None) -> None:
