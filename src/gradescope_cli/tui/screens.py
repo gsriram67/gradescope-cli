@@ -216,8 +216,7 @@ class CoursesScreen(GradescopeScreen):
     def compose(self) -> ComposeResult:
         yield Header()
         yield Static(
-            "Courses  (click ▸ or enter on a term: fold/unfold · enter/click a course: open · "
-            "r: refresh · q: quit)",
+            "Courses — ▸/enter on a term: fold · enter/click a course: open · r: refresh · q: quit",
             classes="hint",
         )
         yield Tree("Courses", id="courses-tree")
@@ -249,12 +248,17 @@ class CoursesScreen(GradescopeScreen):
         for course in courses:
             by_term.setdefault(course.term or "Other", []).append(course)
         for term, term_courses in by_term.items():
-            term_node = tree.root.add(f"{term}  ({len(term_courses)})", data=("term", term))
+            term_label = Text(term, style="bold")
+            term_label.append(f"  ({len(term_courses)})", style="dim")
+            term_node = tree.root.add(term_label, data=("term", term))
             for course in term_courses:
-                label = f"{course.code + ' — ' if course.code else ''}{course.name}  [{course.id}]"
+                label = Text(course.name)
+                if course.code and course.code not in course.name:
+                    label.append(f"  {course.code}", style="dim")
+                label.append(f"  [{course.id}]", style="dim")
                 if course.num_assignments is not None:
-                    label += f"  ({course.num_assignments} asg)"
-                term_node.add(Text(label), data=course)
+                    label.append(f" · {course.num_assignments} asg", style="dim")
+                term_node.add(label, data=course)
             term_node.expand()
         if not courses:
             self.set_hint("No courses found — are you enrolled? (r: retry · q: quit)")

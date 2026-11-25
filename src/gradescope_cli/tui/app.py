@@ -49,6 +49,13 @@ class GradescopeApp(App[None]):
     }
     Tree {
         height: 1fr;
+        padding: 0 1;
+    }
+    Tree .tree--guides {
+        color: $surface-lighten-2;
+    }
+    Tree .tree--label {
+        padding: 0 1;
     }
     """
 
