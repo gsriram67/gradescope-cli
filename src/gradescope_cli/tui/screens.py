@@ -797,6 +797,11 @@ class SubmitModal(ModalScreen[list[Path] | None]):
         height: auto;
         color: $text-muted;
     }
+    #submit-box > Button {
+        width: auto;
+        min-width: 18;
+        margin-top: 1;
+    }
     """
 
     def __init__(self, root: Path | None = None) -> None:
