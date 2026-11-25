@@ -84,9 +84,10 @@ def extract_csrf_token(html: str) -> str:
 
 
 def _assignment_href(course_id: str) -> re.Pattern[str]:
-    return re.compile(
-        rf"^(?:https?://[^/]+)?/courses/{re.escape(course_id)}/assignments/(\d+)/?(?:[?#].*)?$"
-    )
+    """Matches assignment links, including ``/assignments/<id>/submissions/<sid>``
+    (past assignments on the student dashboard link straight to the latest
+    submission page)."""
+    return re.compile(rf"/courses/{re.escape(course_id)}/assignments/(\d+)")
 
 
 _TERM_SEASON_RANK = {"winter": 0, "spring": 1, "summer": 2, "fall": 3}
@@ -108,15 +109,33 @@ def sort_courses_by_term(courses: list[Course]) -> list[Course]:
     return sorted(courses, key=lambda c: term_sort_key(c.term), reverse=True)
 
 
+_TERM_CODE_RE = re.compile(r"_(FA|WI|SP|SU)(\d{2})(?:_|$)")
+_TERM_CODE_SEASON = {"FA": "Fall", "WI": "Winter", "SP": "Spring", "SU": "Summer"}
+
+
+def _term_from_code(code: str | None) -> str | None:
+    """Derive a term label from a course code like ``MATH173A_FA26_001``."""
+    if not code:
+        return None
+    m = _TERM_CODE_RE.search(code)
+    if m is None:
+        return None
+    return f"{_TERM_CODE_SEASON[m.group(1)]} {2000 + int(m.group(2))}"
+
+
 def _term_for_course_box(box: Tag) -> str | None:
-    """Find the term label (e.g. "Fall 2026") a courseBox belongs to."""
+    """Find the term label (e.g. "Fall 2026") a courseBox belongs to.
+
+    The term header is an ``h2.courseList--term`` sibling of the
+    ``courseList--coursesForTerm`` container.
+    """
     container = box.find_parent("div", class_="courseList--coursesForTerm")
     if container is None:
         return None
-    term_div = container.find_previous_sibling("div", class_="courseList--term")
-    if term_div is None:
+    term_el = container.find_previous_sibling(class_="courseList--term")
+    if term_el is None:
         return None
-    return term_div.get_text(strip=True) or None
+    return term_el.get_text(strip=True) or None
 
 
 def parse_courses(html: str) -> list[Course]:
@@ -150,11 +169,19 @@ def parse_courses(html: str) -> list[Course]:
         )
         if code_el is not None:
             code = code_el.get_text(strip=True) or None
+        term = _term_for_course_box(a) or _term_from_code(code)
+        count_el = a.find(class_="courseBox--assignments")
+        num_assignments: int | None = None
+        if count_el is not None:
+            m_count = re.search(r"(\d+)", count_el.get_text())
+            if m_count is not None:
+                num_assignments = int(m_count.group(1))
         courses[course_id] = Course(
             id=course_id,
             name=name,
             code=code,
-            term=_term_for_course_box(a),
+            term=term,
+            num_assignments=num_assignments,
             url=f"/courses/{course_id}",
         )
     if courses:
@@ -178,7 +205,13 @@ def parse_courses(html: str) -> list[Course]:
             code_el = card.find(class_=lambda c: c is not None and "code" in str(c).lower())
             if code_el is not None:
                 code = code_el.get_text(strip=True) or None
-        courses[course_id] = Course(id=course_id, name=name, code=code, url=f"/courses/{course_id}")
+        courses[course_id] = Course(
+            id=course_id,
+            name=name,
+            code=code,
+            term=_term_from_code(code),
+            url=f"/courses/{course_id}",
+        )
     return list(courses.values())
 
 
@@ -266,7 +299,7 @@ def parse_assignments(html: str, course_id: str) -> list[Assignment]:
         href = anchor["href"]
         if not isinstance(href, str):
             return
-        m = href_re.match(href)
+        m = href_re.search(href)
         if m is None:
             return
         assignment_id = m.group(1)
@@ -304,7 +337,7 @@ def parse_assignments(html: str, course_id: str) -> list[Assignment]:
             href = a["href"]
             if not isinstance(href, str):
                 continue
-            m = href_re.match(href)
+            m = href_re.search(href)
             if m is None:
                 continue
             aid, title = m.group(1), th.get_text(" ", strip=True)

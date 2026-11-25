@@ -65,9 +65,21 @@ class TestParseCourses:
         assert courses[0].name == "DSC 190 - Capstone Project"  # div.courseBox--name
         assert courses[0].code == "DSC 190"  # h3.courseBox--shortname
         assert courses[0].url == "/courses/111"
-        assert courses[0].term == "Spring 2026"  # courseList--term
+        assert courses[0].term == "Spring 2026"  # h2.courseList--term
+        assert courses[0].num_assignments == 7  # courseBox--assignments
         assert courses[1].name == "CSE 151A - Intro to ML"  # absolute URL variant
         assert courses[1].term == "Fall 2026"
+
+    def test_term_derived_from_code_when_no_header(self) -> None:
+        html = """
+        <div><a href="/courses/555">
+          <span class="course-card--code">MATH173A_FA26_001</span>
+          <span class="course-card--name">DSC 123A</span>
+        </a></div>
+        """
+        courses = parsers.parse_courses(html)
+        assert courses[0].term == "Fall 2026"
+        assert courses[0].code == "MATH173A_FA26_001"
 
     def test_sort_courses_by_term(self) -> None:
         courses = parsers.parse_courses(ACCOUNT_PAGE)
@@ -95,26 +107,21 @@ class TestParseCourses:
 class TestParseAssignments:
     def test_student_dashboard_table(self) -> None:
         assignments = parsers.parse_assignments(DASHBOARD_PAGE, "111")
-        # includes rows from the separate "past assignments" table too
-        assert [a.id for a in assignments] == ["777", "888", "999", "555"]
-        assert assignments[0].title == "Homework 1"  # from button[data-assignment-id]
-        # due date comes from time.submissionTimeChart--dueDate datetime attr
-        assert assignments[0].due_date == datetime(2026, 11, 25, 23, 59)
-        assert assignments[1].due_date == datetime(2026, 12, 5, 9, 0)
-        assert assignments[2].due_date is None
-        # status + score from td.submissionStatus
-        assert assignments[0].status == "graded"
-        assert assignments[0].score == 8.5
-        assert assignments[0].max_score == 10.0
-        assert assignments[1].status == "submitted"
-        assert assignments[1].score is None
-        assert assignments[2].status == "open"
-        # past assignment from the other table: graded, full score
-        past = assignments[3]
-        assert past.title == "Homework 0"
-        assert past.status == "graded"
-        assert past.score == 10.0
-        assert past.due_date == datetime(2026, 10, 1, 23, 59)
+        # past rows link to /assignments/<id>/submissions/<sid>; active row uses a button
+        assert [a.id for a in assignments] == ["8797872", "8859109", "9113089"]
+        hw1 = assignments[0]
+        assert hw1.title == "Homework 1"
+        assert hw1.url == "/courses/111/assignments/8797872"  # canonical, not the submission url
+        assert hw1.due_date == datetime(2026, 10, 13, 5, 0)  # time[dueDate] datetime attr
+        assert hw1.status == "graded"
+        assert hw1.score == 100.0
+        assert hw1.max_score == 100.0
+        assert assignments[1].score == 98.0
+        assert assignments[1].due_date == datetime(2026, 10, 20, 5, 0)
+        hw7 = assignments[2]  # active assignment: button[data-assignment-id]
+        assert hw7.title == "Homework 7"
+        assert hw7.status == "open"
+        assert hw7.due_date == datetime(2026, 12, 3, 17, 0)
 
     def test_react_assignments_page(self) -> None:
         assignments = parsers.parse_assignments_react(ASSIGNMENTS_REACT_PAGE, "111")

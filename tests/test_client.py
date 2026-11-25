@@ -98,10 +98,12 @@ class TestBrowse:
         session.add("GET", "/courses/111", FakeResponse(text=DASHBOARD_PAGE))
         session.add("GET", "/courses/111/assignments", FakeResponse(text="<html></html>"))
         assignments = client.list_assignments("111")
-        assert [a.id for a in assignments] == ["777", "888", "999", "555"]
+        assert [a.id for a in assignments] == ["8797872", "8859109", "9113089"]
         assert assignments[0].due_date is not None
         assert assignments[0].due_date.year == 2026
-        assert assignments[3].status == "graded"
+        assert assignments[0].status == "graded"
+        assert assignments[0].score == 100.0
+        assert assignments[2].status == "open"
 
     def test_list_assignments_fallback_page(
         self, session: FakeSession, client: GradescopeClient

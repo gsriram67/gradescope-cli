@@ -14,6 +14,7 @@ class Course:
     name: str
     code: str | None = None
     term: str | None = None  # e.g. "Fall 2026"
+    num_assignments: int | None = None
     url: str = ""
 
 

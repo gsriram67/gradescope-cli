@@ -205,6 +205,7 @@ class CoursesScreen(GradescopeScreen):
     def __init__(self) -> None:
         super().__init__()
         self._courses: dict[str, Course] = {}
+        self._default_hint = ""
 
     def compose(self) -> ComposeResult:
         yield Header()
@@ -213,11 +214,13 @@ class CoursesScreen(GradescopeScreen):
         yield Footer()
 
     def on_mount(self) -> None:
+        self._default_hint = str(self.query_one(".hint", Static).content)
         table = self.query_one(DataTable)
         table.add_column("ID", key="id", width=10)
         table.add_column("Term", key="term", width=12)
         table.add_column("Course", key="name")
         table.add_column("Code", key="code", width=12)
+        table.add_column("Asg", key="count", width=5)
         self.set_hint("loading courses...")
         self.reload_courses()
 
@@ -240,11 +243,17 @@ class CoursesScreen(GradescopeScreen):
                 Text(course.term or "-", style="dim"),
                 Text(course.name, style="bold"),
                 Text(course.code or "", style="dim"),
+                Text(
+                    str(course.num_assignments) if course.num_assignments is not None else "-",
+                    style="dim",
+                ),
                 key=course.id,
             )
             self._courses[course.id] = course
         if not courses:
             self.set_hint("No courses found — are you enrolled? (r: retry · q: quit)")
+        else:
+            self.set_hint(self._default_hint)
 
     def action_reload(self) -> None:
         self.reload_courses()
@@ -271,6 +280,7 @@ class AssignmentsScreen(GradescopeScreen):
         super().__init__()
         self.course = course
         self._assignments: dict[str, Assignment] = {}
+        self._default_hint = ""
 
     def compose(self) -> ComposeResult:
         yield Header()
@@ -283,6 +293,7 @@ class AssignmentsScreen(GradescopeScreen):
         yield Footer()
 
     def on_mount(self) -> None:
+        self._default_hint = str(self.query_one(".hint", Static).content)
         table = self.query_one(DataTable)
         table.add_column("ID", key="id", width=10)
         table.add_column("Assignment", key="title")
@@ -317,6 +328,8 @@ class AssignmentsScreen(GradescopeScreen):
             self._assignments[assignment.id] = assignment
         if not assignments:
             self.set_hint("No assignments found. (r: retry · esc: back)")
+        else:
+            self.set_hint(self._default_hint)
 
     def action_reload(self) -> None:
         self.reload_assignments()
@@ -548,6 +561,7 @@ class LeaderboardScreen(GradescopeScreen):
         super().__init__()
         self.course = course
         self.assignment = assignment
+        self._default_hint = ""
 
     def compose(self) -> ComposeResult:
         yield Header()
@@ -559,6 +573,7 @@ class LeaderboardScreen(GradescopeScreen):
         yield Footer()
 
     def on_mount(self) -> None:
+        self._default_hint = str(self.query_one(".hint", Static).content)
         table = self.query_one(DataTable)
         table.add_column("Rank", key="rank", width=6)
         table.add_column("Name", key="name")
@@ -588,6 +603,8 @@ class LeaderboardScreen(GradescopeScreen):
             )
         if not entries:
             self.set_hint("No leaderboard entries. (r: retry · esc: back)")
+        else:
+            self.set_hint(self._default_hint)
 
     def action_reload(self) -> None:
         self.reload()

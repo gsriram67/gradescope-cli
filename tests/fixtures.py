@@ -30,21 +30,24 @@ LOGIN_PAGE_FAILED = """
 
 ACCOUNT_PAGE = """
 <html><body>
-  <h2 class="pageHeading">Student Courses</h2>
-  <div class="courseList">
-    <div class="courseList--term">Spring 2026</div>
-    <div class="courseList--coursesForTerm">
-      <a class="courseBox" href="/courses/111">
-        <h3 class="courseBox--shortname">DSC 190</h3>
-        <div class="courseBox--name">DSC 190 - Capstone Project</div>
-      </a>
-    </div>
-    <div class="courseList--term">Fall 2026</div>
-    <div class="courseList--coursesForTerm">
-      <a class="courseBox" href="https://www.gradescope.com/courses/222">
-        <h3 class="courseBox--shortname">CSE 151A</h3>
-        <div class="courseBox--name">CSE 151A - Intro to ML</div>
-      </a>
+  <h1 class="pageHeading">Course Dashboard</h1>
+  <div id="account-show">
+    <div class="courseList">
+      <h2 class="courseList--term">Spring 2026</h2>
+      <div class="courseList--coursesForTerm">
+        <a class="courseBox" href="/courses/111">
+          <h3 class="courseBox--shortname">DSC 190</h3>
+          <div class="courseBox--name">DSC 190 - Capstone Project</div>
+          <div class="courseBox--assignments"><div class="left">7 assignments</div></div>
+        </a>
+      </div>
+      <h2 class="courseList--term">Fall 2026</h2>
+      <div class="courseList--coursesForTerm">
+        <a class="courseBox" href="https://www.gradescope.com/courses/222">
+          <h3 class="courseBox--shortname">CSE 151A</h3>
+          <div class="courseBox--name">CSE 151A - Intro to ML</div>
+        </a>
+      </div>
     </div>
   </div>
 </body></html>
@@ -54,58 +57,45 @@ DASHBOARD_PAGE = """
 <html><body>
   <table id="assignments-student-table">
     <tbody>
-      <tr>
-        <th class="table--primaryLink">
-          <button data-assignment-id="777"
-                  data-post-url="/courses/111/assignments/777/submissions">Homework 1</button>
+      <tr role="row">
+        <th role="columnheader" scope="col">Name</th>
+        <th role="columnheader" scope="col">Status</th>
+        <th role="columnheader" scope="col">Due</th>
+      </tr>
+      <tr role="row">
+        <th class="table--primaryLink" role="rowheader" scope="row">
+          <a aria-label="View Homework 1"
+             href="/courses/111/assignments/8797872/submissions/435388014">Homework 1</a>
+        </th>
+        <td class="submissionStatus"><div class="submissionStatus--score">100.0 / 100.0</div></td>
+        <td><div class="submissionTimeChart">
+          <time class="submissionTimeChart--releaseDate"
+                datetime="2026-10-02 15:53:00 -0700"></time>
+          <time class="submissionTimeChart--dueDate"
+                datetime="2026-10-13 05:00:00 -0700"></time>
+        </div></td>
+      </tr>
+      <tr role="row">
+        <th class="table--primaryLink" role="rowheader" scope="row">
+          <a href="/courses/111/assignments/8859109/submissions/438001592">Homework 2</a>
         </th>
         <td class="submissionStatus submissionStatus-complete">
-          <div class="submissionStatus--score">8.5 / 10</div>
+          <div class="submissionStatus--score">98.0 / 100.0</div>
         </td>
         <td>
-          <time class="submissionTimeChart--releaseDate"
-              datetime="2026-11-01T00:00:00-07:00"></time>
           <time class="submissionTimeChart--dueDate"
-              datetime="2026-11-25T23:59:00-08:00"></time>
+                datetime="2026-10-20 05:00:00 -0700"></time>
         </td>
       </tr>
-      <tr>
+      <tr role="row">
         <th class="table--primaryLink">
-          <button data-assignment-id="888"
-                  data-post-url="/courses/111/assignments/888/submissions">Homework 2</button>
-        </th>
-        <td class="submissionStatus submissionStatus-complete"></td>
-        <td>
-          <time class="submissionTimeChart--releaseDate"
-              datetime="2026-11-20T00:00:00-08:00"></time>
-          <time class="submissionTimeChart--dueDate"
-              datetime="2026-12-05T09:00:00-08:00"></time>
-        </td>
-      </tr>
-      <tr>
-        <th class="table--primaryLink">
-          <button data-assignment-id="999"
-                  data-post-url="/courses/111/assignments/999/submissions">Extra credit</button>
+          <button data-assignment-id="9113089"
+                  data-post-url="/courses/111/assignments/9113089/submissions">Homework 7</button>
         </th>
         <td class="submissionStatus"></td>
-        <td></td>
-      </tr>
-    </tbody>
-  </table>
-  <h2>Past assignments</h2>
-  <table class="table" id="assignments-past-table">
-    <tbody>
-      <tr>
-        <th class="table--primaryLink">
-          <button data-assignment-id="555"
-                  data-post-url="/courses/111/assignments/555/submissions">Homework 0</button>
-        </th>
-        <td class="submissionStatus submissionStatus-complete">
-          <div class="submissionStatus--score">10 / 10</div>
-        </td>
         <td>
           <time class="submissionTimeChart--dueDate"
-                datetime="2026-10-01T23:59:00-07:00"></time>
+                datetime="2026-12-03T17:00:00-08:00"></time>
         </td>
       </tr>
     </tbody>
