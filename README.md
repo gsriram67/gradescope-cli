@@ -10,14 +10,30 @@ A TUI for [Gradescope](https://www.gradescope.com):
 - track autograder progress and scores (per-test-case results)
 - view submission history and assignment leaderboards (per-category columns, searchable)
 
+## Usage
+
+```bash
+# install from GitHub (uv-managed, provides the `gradescope` command):
+uv add "git+https://github.com/gsriram67/gradescope-cli.git"
+gradescope        # launch the TUI
+```
+
+or from a clone:
+
+```bash
+uv sync
+uv run gradescope
+```
+
+(`python -m gradescope_cli` works too.) Then sign in (env vars or the login
+screen) and browse courses → assignments → submit / autograder / leaderboard —
+see the key table below.
+
 ## Setup
 
 ```bash
 uv sync          # install dependencies into .venv
-uv run gradescope # launch the TUI
 ```
-
-(`python -m gradescope_cli` works too.)
 
 ## Signing in
 
