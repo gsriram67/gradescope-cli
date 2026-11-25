@@ -13,6 +13,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, cast
 
+from rich.text import Text
 from textual import on, work
 from textual.app import ComposeResult
 from textual.binding import Binding
@@ -39,6 +40,16 @@ from gradescope_cli.api.models import (
     Submission,
 )
 from gradescope_cli.exceptions import GradescopeError
+from gradescope_cli.render import (
+    due_style,
+    due_text,
+    fmt_due,
+    score_bar,
+    score_style,
+    score_text,
+    status_label,
+    status_style,
+)
 
 if TYPE_CHECKING:
     from gradescope_cli.tui.app import GradescopeApp
@@ -47,22 +58,19 @@ POLL_INTERVAL = 3.0
 POLL_TIMEOUT = 600.0
 
 
-def fmt_due(due: datetime | None) -> str:
-    return due.strftime("%Y-%m-%d %H:%M") if due is not None else "-"
+def due_cell(due: datetime | None) -> Text:
+    """Styled due-date cell with a relative hint ("in 2 days" / "overdue 3 days")."""
+    now = datetime.now()
+    return Text(due_text(due, now=now), style=due_style(due, now=now))
 
 
-def score_bar(score: float | None, max_score: float | None, width: int = 12) -> str:
-    """Bubbletea-style text progress bar, e.g. ``██████░░░░░░``."""
-    if score is None or max_score is None or max_score <= 0:
-        return "░" * width
-    filled = min(width, max(0, round(score / max_score * width)))
-    return "█" * filled + "░" * (width - filled)
-
-
-def fmt_score(score: float | None, max_score: float | None) -> str:
-    if score is not None and max_score is not None:
-        return f"{score:g}/{max_score:g}"
-    return "-"
+def score_cell(score: float | None, max_score: float | None) -> Text:
+    """Styled score cell: colored bar + "8.5/10 (85%)"."""
+    if score is None or max_score is None:
+        return Text("-", style="dim")
+    bar = Text(f"{score_bar(score, max_score)} {score_text(score, max_score)}")
+    bar.stylize(score_style(score, max_score))
+    return bar
 
 
 class GradescopeScreen(Screen[None]):
@@ -211,7 +219,11 @@ class CoursesScreen(GradescopeScreen):
         self._courses = {}
         for course in courses:
             table.add_row(
-                course.id, course.term or "-", course.name, course.code or "", key=course.id
+                Text(course.id),
+                Text(course.term or "-", style="dim"),
+                Text(course.name, style="bold"),
+                Text(course.code or "", style="dim"),
+                key=course.id,
             )
             self._courses[course.id] = course
         if not courses:
@@ -277,18 +289,12 @@ class AssignmentsScreen(GradescopeScreen):
         table.clear()
         self._assignments = {}
         for assignment in assignments:
-            score_cell = (
-                f"{score_bar(assignment.score, assignment.max_score)} "
-                f"{fmt_score(assignment.score, assignment.max_score)}"
-                if assignment.score is not None
-                else "-"
-            )
             table.add_row(
-                assignment.id,
-                assignment.title,
-                fmt_due(assignment.due_date),
-                assignment.status or "-",
-                score_cell,
+                Text(assignment.id),
+                Text(assignment.title),
+                due_cell(assignment.due_date),
+                Text(status_label(assignment.status), style=status_style(assignment.status)),
+                score_cell(assignment.score, assignment.max_score),
                 key=assignment.id,
             )
             self._assignments[assignment.id] = assignment
@@ -445,9 +451,12 @@ class AssignmentScreen(GradescopeScreen):
             time.sleep(POLL_INTERVAL)
 
     def _show_result(self, result: AutograderResult) -> None:
-        header = f"status: {result.status}"
+        header = Text(
+            f"status: {status_label(result.status)}", style=status_style(result.status) or "bold"
+        )
         if result.score is not None and result.max_score is not None:
-            header += f"  score: {result.score:g} / {result.max_score:g}"
+            header.append(f"  score: {score_text(result.score, result.max_score)}")
+            header.stylize(score_style(result.score, result.max_score), 7)
         self._set_status(header)
         bar = self.query_one("#progress", ProgressBar)
         if result.status == "graded" and result.max_score:
@@ -457,17 +466,22 @@ class AssignmentScreen(GradescopeScreen):
         cases = self.query_one("#cases", DataTable)
         cases.clear()
         for case in result.test_cases:
+            result_style = (
+                "green" if case.status == "passed" else "red" if case.status == "failed" else ""
+            )
             cases.add_row(
-                case.name,
-                case.status,
-                f"{score_bar(case.score, case.max_score)} {fmt_score(case.score, case.max_score)}",
+                Text(case.name),
+                Text(case.status, style=result_style),
+                score_cell(case.score, case.max_score),
             )
         cases.display = bool(result.test_cases)
 
-    def _set_status(self, text: str) -> None:
-        self.status_text = text
+    def _set_status(self, text: str | Text) -> None:
+        self.status_text = str(text)
         self.query_one("#status", Static).update(text)
-        if text in {"submitting...", "checking autograder..."} or "watching" in text:
+        if isinstance(text, str) and (
+            text in {"submitting...", "checking autograder..."} or "watching" in text
+        ):
             self.query_one("#progress", ProgressBar).update(total=None)
 
 
@@ -514,7 +528,13 @@ class LeaderboardScreen(GradescopeScreen):
         table = self.query_one(DataTable)
         table.clear()
         for entry in entries:
-            table.add_row(str(entry.rank), entry.name, f"{entry.score:g}", key=str(entry.rank))
+            rank_style = "bold yellow" if entry.rank == 1 else "dim" if entry.rank > 3 else ""
+            table.add_row(
+                Text(str(entry.rank), style=rank_style),
+                Text(entry.name, style="bold" if entry.rank == 1 else ""),
+                Text(f"{entry.score:g}", style=rank_style),
+                key=str(entry.rank),
+            )
         if not entries:
             self.set_hint("No leaderboard entries. (r: retry · esc: back)")
 

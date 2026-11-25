@@ -16,19 +16,15 @@ import argparse
 import os
 import sys
 from collections.abc import Callable, Sequence
-from datetime import datetime
 from pathlib import Path
 
 from gradescope_cli.api.client import GradescopeAPI, GradescopeClient
-from gradescope_cli.api.models import Assignment, AutograderResult, LeaderboardEntry
+from gradescope_cli.api.models import AutograderResult, LeaderboardEntry
 from gradescope_cli.config import ENV_EMAIL, Credentials, load_credentials
 from gradescope_cli.exceptions import ConfigError, GradescopeError
+from gradescope_cli.render import due_text, score_text, status_label
 
 Command = Callable[[argparse.Namespace, GradescopeAPI], int]
-
-
-def _fmt_due(due: datetime | None) -> str:
-    return due.strftime("%Y-%m-%d %H:%M") if due is not None else "-"
 
 
 def _print_result(result: AutograderResult) -> None:
@@ -66,12 +62,6 @@ def cmd_courses(args: argparse.Namespace, client: GradescopeAPI) -> int:
     return 0
 
 
-def _fmt_score(a: Assignment) -> str:
-    if a.score is not None and a.max_score is not None:
-        return f"{a.score:g}/{a.max_score:g}"
-    return "-"
-
-
 def cmd_assignments(args: argparse.Namespace, client: GradescopeAPI) -> int:
     assignments = client.list_assignments(args.course_id)
     if not assignments:
@@ -80,8 +70,8 @@ def cmd_assignments(args: argparse.Namespace, client: GradescopeAPI) -> int:
     width = max(len(a.title) for a in assignments)
     for a in assignments:
         print(
-            f"{a.id:>8}  {a.title:<{width}}  due {_fmt_due(a.due_date):<16}  "
-            f"{(a.status or '-'):<10}  {_fmt_score(a)}"
+            f"{a.id:>8}  {a.title:<{width}}  due {due_text(a.due_date):<30}  "
+            f"{status_label(a.status):<10}  {score_text(a.score, a.max_score)}"
         )
     return 0
 

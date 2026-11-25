@@ -223,6 +223,7 @@ source = { editable = "." }
 dependencies = [
     { name = "beautifulsoup4" },
     { name = "requests" },
+    { name = "rich" },
     { name = "textual" },
 ]
 
@@ -238,6 +239,7 @@ dev = [
 requires-dist = [
     { name = "beautifulsoup4" },
     { name = "requests" },
+    { name = "rich", specifier = ">=15.0.0" },
     { name = "textual", specifier = ">=8.2.8" },
 ]
 

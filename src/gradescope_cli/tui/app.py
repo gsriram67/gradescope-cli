@@ -33,6 +33,9 @@ class GradescopeApp(App[None]):
         height: 1;
         padding: 0 2;
     }
+    #progress .bar--bar {
+        background: $success;
+    }
     #cases {
         height: auto;
         max-height: 40%;

@@ -188,6 +188,10 @@ def test_navigate_to_assignments() -> None:
             row = app.screen.query_one(DataTable).get_row_at(0)
             assert "█" in str(row[4]) and "8.5/10" in str(row[4])
             assert str(row[3]) == "graded"
+            # due column has a relative hint ("in 1 day" / "overdue ...")
+            assert "·" in str(row[2])
+            # 8.5/10 = 85% -> green bar (Rich span style)
+            assert any(str(span.style) == "green" for span in row[4].spans)
 
     run(go())
 
@@ -235,7 +239,7 @@ def test_submit_flow_watches_autograder(tmp_path: Path) -> None:
                 pilot,
                 lambda: "graded" in screen.status_text,
             )
-            assert "8.5 / 10" in screen.status_text
+            assert "8.5/10" in screen.status_text
             assert screen.submission_id == "999"
             assert ("submit", ("111", "777", (code,))) in client.calls
 
