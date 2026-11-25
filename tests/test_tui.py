@@ -287,6 +287,38 @@ def test_vim_keybinds_navigate() -> None:
     run(go())
 
 
+def test_arrow_keys_still_work() -> None:
+    """Arrow keys navigate alongside vim j/k."""
+    app, _ = make_app()
+
+    async def go() -> None:
+        async with app.run_test(size=(100, 30)) as pilot:
+            await wait_for(pilot, lambda: rows_loaded(app))
+            tree = app.screen.query_one("#courses-tree", Tree)
+            await pilot.press("down")  # arrow down: cursor -> first term
+            await pilot.pause(0.1)
+            assert tree.cursor_line == 0
+            await pilot.press("down")
+            await pilot.pause(0.1)
+            assert tree.cursor_line == 1
+            await pilot.press("up")
+            await pilot.pause(0.1)
+            assert tree.cursor_line == 0
+            # and in the assignments table (cursor is on line 0; one down -> course)
+            await pilot.press("down", "enter")
+            await wait_for(pilot, lambda: isinstance(app.screen, AssignmentsScreen))
+            await wait_for(pilot, lambda: table_rows(app) == 2)
+            table = app.screen.query_one(DataTable)
+            await pilot.press("down")
+            await pilot.pause(0.1)
+            assert table.cursor_coordinate.row == 1
+            await pilot.press("up")
+            await pilot.pause(0.1)
+            assert table.cursor_coordinate.row == 0
+
+    run(go())
+
+
 def test_navigate_to_assignments() -> None:
     app, _ = make_app()
 
