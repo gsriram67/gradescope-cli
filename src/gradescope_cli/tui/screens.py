@@ -257,7 +257,8 @@ class CoursesScreen(GradescopeScreen):
                 if course.num_assignments is not None:
                     label.append(f" · {course.num_assignments} asg", style="dim")
                 term_node.add(label, data=course)
-            term_node.expand()
+            if term_index == 0:
+                term_node.expand()  # only the most recent term starts unfolded
         if not courses:
             self.set_hint("No courses found — are you enrolled? (r: retry · q: quit)")
         else:

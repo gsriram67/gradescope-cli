@@ -226,6 +226,8 @@ def test_term_sections_fold_and_unfold() -> None:
             tree = app.screen.query_one("#courses-tree", Tree)
             term_node = tree.root.children[0]
             assert term_node.is_expanded
+            # older terms start folded
+            assert all(not c.is_expanded for c in tree.root.children[1:])
             # current (first) term is highlighted green; course ids are cyan
             label = term_node.label
             assert isinstance(label, Text)
