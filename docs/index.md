@@ -34,7 +34,7 @@ with vim keybinds, colors, and filters.
 ## Install
 
 ```bash
-uv add "git+https://github.com/gsriram67/gscopecli.git"
+uv add "git+https://github.com/gsriram67/gradescope-cli.git"
 # then run:
 gradescope
 ```
@@ -42,7 +42,7 @@ gradescope
 or from a clone:
 
 ```bash
-git clone https://github.com/gsriram67/gscopecli.git
+git clone https://github.com/gsriram67/gradescope-cli.git
 cd gscopecli && uv sync && uv run gradescope
 ```
 
@@ -90,7 +90,7 @@ Launch with `gradescope`. Sign in (or get signed in from env/cache), then:
 
 ## Repository
 
-Source code: <https://github.com/gsriram67/gscopecli>
+Source code: <https://github.com/gsriram67/gradescope-cli>
 
 ## Development
 
