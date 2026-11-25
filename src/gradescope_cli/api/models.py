@@ -80,9 +80,14 @@ class AutograderResult:
 
 @dataclass(frozen=True)
 class LeaderboardEntry:
-    """One row of an assignment leaderboard."""
+    """One row of an assignment leaderboard.
+
+    ``score`` is the total; ``scores`` maps each leaderboard category
+    (e.g. "task 1") to its value, in column order.
+    """
 
     rank: int
     name: str
     score: float
     submission_id: str | None = None
+    scores: dict[str, float] = field(default_factory=dict)

@@ -30,7 +30,7 @@ from gradescope_cli.config import (
     save_credentials,
 )
 from gradescope_cli.exceptions import ConfigError, GradescopeError
-from gradescope_cli.render import due_text, score_text, status_label
+from gradescope_cli.render import due_text, fmt_number, score_text, status_label
 
 Command = Callable[[argparse.Namespace, GradescopeAPI], int]
 
@@ -124,8 +124,23 @@ def cmd_leaderboard(args: argparse.Namespace, client: GradescopeAPI) -> int:
         print("No leaderboard entries.")
         return 0
     width = max(len(e.name) for e in entries)
+    categories: list[str] = []
     for e in entries:
-        print(f"{e.rank:>4}  {e.name:<{width}}  {e.score:g}")
+        for col in e.scores:
+            if col not in categories:
+                categories.append(col)
+    header = f"{'rank':>4}  {'name':<{width}}  " + "  ".join(f"{c:>10}" for c in categories)
+    if categories:
+        header += f"  {'total':>10}"
+    print(header)
+    for e in entries:
+        cells = "  ".join(f"{fmt_number(e.scores.get(c))!s:>10}" for c in categories)
+        line = f"{e.rank:>4}  {e.name:<{width}}  {cells}"
+        if categories:
+            line += f"  {fmt_number(e.score):>10}"
+        else:
+            line += f"  {fmt_number(e.score)}"
+        print(line)
     return 0
 
 

@@ -46,6 +46,7 @@ from gradescope_cli.render import (
     due_compact,
     due_style,
     due_text,
+    fmt_number,
     score_bar,
     score_style,
     score_text,
@@ -576,10 +577,6 @@ class LeaderboardScreen(GradescopeScreen):
 
     def on_mount(self) -> None:
         self._default_hint = str(self.query_one(".hint", Static).content)
-        table = self.query_one(DataTable)
-        table.add_column("Rank", key="rank", width=6)
-        table.add_column("Name", key="name")
-        table.add_column("Score", key="score", width=10)
         self.set_hint("loading leaderboard...")
         self.reload()
 
@@ -594,15 +591,31 @@ class LeaderboardScreen(GradescopeScreen):
 
     def populate(self, entries: list[LeaderboardEntry]) -> None:
         table = self.query_one(DataTable)
-        table.clear()
+        table.clear(columns=True)
+        table.add_column("Rank", key="rank", width=6)
+        table.add_column("Name", key="name")
+        # one column per leaderboard category (e.g. "task 1", "task 2"), in order
+        categories: list[str] = []
+        for entry in entries:
+            for col in entry.scores:
+                if col not in categories:
+                    categories.append(col)
+        for col in categories:
+            table.add_column(col, key=f"cat:{col}", width=12)
+        table.add_column("Total", key="total", width=12)
         for entry in entries:
             rank_style = "bold yellow" if entry.rank == 1 else "dim" if entry.rank > 3 else ""
-            table.add_row(
+            row: list[Text] = [
                 Text(str(entry.rank), style=rank_style),
                 Text(entry.name, style="bold" if entry.rank == 1 else ""),
-                Text(f"{entry.score:g}", style=rank_style),
-                key=str(entry.rank),
-            )
+            ]
+            for col in categories:
+                if col in entry.scores:
+                    row.append(Text(fmt_number(entry.scores[col])))
+                else:
+                    row.append(Text("-", style="dim"))
+            row.append(Text(fmt_number(entry.score), style=rank_style))
+            table.add_row(*row, key=str(entry.rank))
         if not entries:
             self.set_hint("No leaderboard entries. (r: retry · esc: back)")
         else:

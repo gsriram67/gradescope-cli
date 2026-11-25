@@ -258,6 +258,14 @@ def test_open_assignment_and_leaderboard() -> None:
                 pilot,
                 lambda: isinstance(app.screen, LeaderboardScreen) and table_rows(app) == 2,
             )
+            # per-category columns: Rank, Name, task 1, Total
+            lb = app.screen.query_one(DataTable)
+            assert [c.label.plain for c in lb.ordered_columns] == [
+                "Rank",
+                "Name",
+                "task 1",
+                "Total",
+            ]
 
     run(go())
 

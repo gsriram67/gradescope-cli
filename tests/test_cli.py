@@ -113,8 +113,8 @@ class FakeClient:
     def get_leaderboard(self, course_id: str, assignment_id: str) -> list[LeaderboardEntry]:
         self.calls.append(("get_leaderboard", (course_id, assignment_id)))
         return [
-            LeaderboardEntry(rank=1, name="Alice", score=99.5),
-            LeaderboardEntry(rank=2, name="Bob", score=87.0),
+            LeaderboardEntry(rank=1, name="Alice", score=99.5, scores={"task 1": 99.5}),
+            LeaderboardEntry(rank=2, name="Bob", score=87.0, scores={"task 1": 87.0}),
         ]
 
 
@@ -219,6 +219,7 @@ class TestCommands:
         out = capsys.readouterr().out
         assert "Alice" in out and "99.5" in out
         assert "Bob" in out
+        assert "task 1" in out  # category column header
 
     def test_tui_launches_app(
         self, fake_client: FakeClient, monkeypatch: pytest.MonkeyPatch

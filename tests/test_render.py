@@ -46,6 +46,15 @@ class TestHumanize:
         assert render.humanize_amount(timedelta(seconds=30), short=True) == "now"
 
 
+class TestFmtNumber:
+    def test_formats(self) -> None:
+        assert render.fmt_number(8.5) == "8.5"
+        assert render.fmt_number(100.0) == "100"
+        assert render.fmt_number(8905034.67) == "8,905,034.67"
+        assert render.fmt_number(13563847.0) == "13,563,847"
+        assert render.fmt_number(None) == "-"
+
+
 class TestScore:
     def test_bar(self) -> None:
         assert render.score_bar(10, 10) == "█" * 12

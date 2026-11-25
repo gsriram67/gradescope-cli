@@ -750,15 +750,36 @@ def parse_leaderboard_react(html: str) -> list[LeaderboardEntry]:
     entries = props.get("entries") if isinstance(props, dict) else None
     if not isinstance(entries, list):
         return []
+    # Column order from props["columns"]; "(private)" columns are hidden from students.
+    columns_raw = props.get("columns") if isinstance(props, dict) else None
+    column_names: list[str] = []
+    if isinstance(columns_raw, list):
+        for col in columns_raw:
+            if (
+                isinstance(col, dict)
+                and isinstance(col.get("name"), str)
+                and "(private)" not in col["name"]
+            ):
+                column_names.append(col["name"])
+    if not column_names:  # fall back to task keys found in entries
+        seen_keys: list[str] = []
+        for entry in entries:
+            if isinstance(entry, dict):
+                for key in entry:
+                    if _LB_TASK_KEY.match(str(key)) and str(key) not in seen_keys:
+                        seen_keys.append(str(key))
+        column_names = seen_keys
     result: list[LeaderboardEntry] = []
     for rank, entry in enumerate(entries, start=1):
         if not isinstance(entry, dict):
             continue
         name = str(entry.get("name") or "")
-        score = 0.0
-        for key, value in entry.items():
-            if _LB_TASK_KEY.match(str(key)) and isinstance(value, (int, float)):
-                score += float(value)
+        scores: dict[str, float] = {}
+        for col in column_names:
+            value = _as_float(entry.get(col))
+            if value is not None:
+                scores[col] = value
+        score = sum(scores.values())
         sid = entry.get("assignment_submission_id")
         result.append(
             LeaderboardEntry(
@@ -766,6 +787,7 @@ def parse_leaderboard_react(html: str) -> list[LeaderboardEntry]:
                 name=name,
                 score=score,
                 submission_id=str(sid) if sid is not None else None,
+                scores=scores,
             )
         )
     return result

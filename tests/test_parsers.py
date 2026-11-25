@@ -316,4 +316,7 @@ class TestParseLeaderboard:
         assert entries[0].score == 99.5  # sum of public task scores
         assert entries[0].submission_id == "1001"
         assert entries[1].score == 80.0
+        # per-category scores, in column order, private columns excluded
+        assert entries[0].scores == {"task 1": 90.5, "task 2": 9.0}
+        assert entries[1].scores == {"task 1": 80.0}
         assert parsers.parse_leaderboard_react("<html></html>") == []

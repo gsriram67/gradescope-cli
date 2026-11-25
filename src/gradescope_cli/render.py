@@ -111,13 +111,24 @@ def score_fraction(score: float | None, max_score: float | None) -> float | None
     return score / max_score
 
 
+def fmt_number(value: float | None) -> str:
+    """Human-readable number: thousands separators for big values, ``8.5`` style otherwise."""
+    if value is None:
+        return "-"
+    if abs(value) >= 1000:
+        if float(value).is_integer():
+            return f"{value:,.0f}"
+        return f"{value:,.2f}".rstrip("0").rstrip(".")
+    return f"{value:g}"
+
+
 def score_text(score: float | None, max_score: float | None) -> str:
     """e.g. ``8.5/10 (85%)``."""
     if score is None or max_score is None:
         return "-"
     frac = score_fraction(score, max_score)
     pct = f" ({frac:.0%})" if frac is not None else ""
-    return f"{score:g}/{max_score:g}{pct}"
+    return f"{fmt_number(score)}/{fmt_number(max_score)}{pct}"
 
 
 def score_style(score: float | None, max_score: float | None) -> str:
