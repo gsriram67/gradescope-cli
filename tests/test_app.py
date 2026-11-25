@@ -11,6 +11,16 @@ from gradescope_cli.config import Credentials, save_credentials
 from gradescope_cli.tui.app import GradescopeApp
 
 
+class FakeTty:
+    def isatty(self) -> bool:
+        return True
+
+
+@pytest.fixture(autouse=True)
+def _fake_tty_stdin(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr("sys.stdin", FakeTty())
+
+
 def test_main_signs_in_from_env_and_launches_tui(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("GRADESCOPE_EMAIL", "env@ucsd.edu")
     monkeypatch.setenv("GRADESCOPE_PASSWORD", "pw")
@@ -58,6 +68,35 @@ def test_main_uses_cache_when_no_env(monkeypatch: pytest.MonkeyPatch, tmp_path: 
     monkeypatch.setattr(app, "GradescopeClient", FakeRealClient)
     assert app.main() == 0
     assert launched[0].client.email == "cached@ucsd.edu"
+
+
+def test_main_help_flag(capsys: pytest.CaptureFixture[str]) -> None:
+    assert app.main(["--help"]) == 0
+    out = capsys.readouterr().out
+    assert "usage: gradescope" in out
+    assert "--version" in out
+
+
+def test_main_version_flag(capsys: pytest.CaptureFixture[str]) -> None:
+    assert app.main(["--version"]) == 0
+    assert "gradescope-cli" in capsys.readouterr().out
+
+
+def test_main_without_tty_does_not_crash(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    class NoTty:
+        def isatty(self) -> bool:
+            return False
+
+    monkeypatch.setattr("sys.stdin", NoTty())  # overrides the autouse tty fixture
+    launched: list[GradescopeApp] = []
+    monkeypatch.setattr(
+        "gradescope_cli.tui.app.GradescopeApp.run", lambda self: launched.append(self)
+    )
+    assert app.main([]) == 0  # prints a note instead of launching the TUI
+    assert launched == []
+    assert "terminal UI" in capsys.readouterr().err
 
 
 def test_main_without_creds_opens_tui_login_screen(
