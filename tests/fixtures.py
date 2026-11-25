@@ -171,6 +171,14 @@ ASSIGNMENT_PAGE = """
       <td></td>
     </tr>
   </table>
+  <div data-react-class="AssignmentSubmissionViewer"
+       data-react-props='{"assignment_submission": {"id": 999,
+            "created_at": "2026-11-24T10:00:00.000000-08:00", "status": "processed",
+            "score": "8.5"},
+          "paths": {"submission_path": "/courses/111/assignments/777/submissions/999",
+                    "submission_react_path":
+                        "/courses/111/assignments/777/submissions/999.json?content=react"}}'>
+  </div>
 </body></html>
 """
 

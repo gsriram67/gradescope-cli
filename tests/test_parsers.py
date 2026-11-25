@@ -160,9 +160,76 @@ class TestParseSubmissionJson:
             ("test_edge", "failed"),
         ]
 
-    def test_no_score_returns_none(self) -> None:
-        assert parsers.parse_submission_json({"status": "pending"}, "999") is None
+    def test_no_score_no_status_returns_none(self) -> None:
+        assert parsers.parse_submission_json({}, "999") is None
         assert parsers.parse_submission_json(["not", "a", "dict"], "999") is None
+
+    def test_status_only_is_pending(self) -> None:
+        result = parsers.parse_submission_json({"status": "pending"}, "999")
+        assert result is not None
+        assert result.status == "pending"
+        assert result.score is None
+
+    def test_real_react_shape(self) -> None:
+        # shape of /submissions/<id>.json?content=react
+        data = {
+            "assignment": {"total_points": "33.0"},
+            "assignment_submission": {"status": "processed", "score": "32.9272"},
+            "autograder_results": {
+                "score": 32.92716560936051,
+                "tests": [
+                    {
+                        "name": "Check submitted files",
+                        "score": 0.0,
+                        "max_score": 0.0,
+                        "status": "passed",
+                    },
+                    {"name": "Autograder", "score": 32.9, "max_score": 33.0, "status": "passed"},
+                ],
+            },
+        }
+        result = parsers.parse_submission_json(data, "449071192")
+        assert result is not None
+        assert result.status == "graded"
+        assert result.score == 32.9272
+        assert result.max_score == 33.0
+        assert [(c.name, c.status) for c in result.test_cases] == [
+            ("Check submitted files", "passed"),
+            ("Autograder", "passed"),
+        ]
+
+
+class TestAssignmentPageProps:
+    def test_extracts_viewer_props(self) -> None:
+        props = parsers.parse_assignment_page_props(ASSIGNMENT_PAGE)
+        assert props is not None
+        assert props["assignment_submission"]["id"] == 999
+        assert props["paths"]["submission_path"] == "/courses/111/assignments/777/submissions/999"
+
+    def test_missing(self) -> None:
+        assert parsers.parse_assignment_page_props("<html></html>") is None
+
+    def test_past_submissions_json(self) -> None:
+        data = {
+            "past_submissions": [
+                {
+                    "id": 999,
+                    "created_at": "2026-11-24T10:00:00.000000-08:00",
+                    "score": "8.5",
+                    "status": "processed",
+                    "show_path": "/courses/111/assignments/777/submissions/999",
+                },
+                {"id": 998, "created_at": "2026-11-23T09:00:00-08:00", "score": None},
+            ]
+        }
+        subs = parsers.parse_past_submissions_json(data, "111", "777")
+        assert [s.id for s in subs] == ["999", "998"]
+        assert subs[0].submitted_at == datetime(2026, 11, 24, 10, 0)
+        assert subs[0].score == 8.5
+        assert subs[0].status == "processed"
+        assert subs[0].url == "/courses/111/assignments/777/submissions/999"
+        assert subs[1].score is None
+        assert parsers.parse_past_submissions_json({"nope": []}, "111", "777") == []
 
     def test_parses_titles_and_due_dates(self) -> None:
         assignments = parsers.parse_assignments(ASSIGNMENTS_PAGE, "111")

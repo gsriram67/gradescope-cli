@@ -394,7 +394,7 @@ class AssignmentScreen(GradescopeScreen):
     def compose(self) -> ComposeResult:
         yield Header()
         yield Static(id="info", classes="hint")
-        yield ProgressBar(id="progress", total=None)  # indeterminate until graded
+        yield ProgressBar(id="progress", total=None, show_percentage=False, show_eta=False)
         yield Static(id="status")
         yield RowClickTable(id="submissions", cursor_type="row")
         yield RowClickTable(id="cases", cursor_type="row")
@@ -440,6 +440,8 @@ class AssignmentScreen(GradescopeScreen):
                 score_cell(s.score, self.assignment.max_score),
                 key=s.id,
             )
+        if not submissions and not self.status_text:
+            self._set_status("no submissions yet — press s to submit files")
 
     @on(DataTable.RowSelected, "#submissions")
     def track_submission(self, event: DataTable.RowSelected) -> None:

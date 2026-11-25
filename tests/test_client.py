@@ -200,12 +200,41 @@ class TestSubmit:
 
 
 class TestSubmissions:
-    def test_list_submissions(self, session: FakeSession, client: GradescopeClient) -> None:
+    def test_list_submissions_via_past_submissions_json(
+        self, session: FakeSession, client: GradescopeClient
+    ) -> None:
         session.add("GET", "/courses/111/assignments/777", FakeResponse(text=ASSIGNMENT_PAGE))
+        session.add(
+            "GET",
+            "/courses/111/assignments/777/submissions/999.json",
+            FakeResponse(
+                json_data={
+                    "past_submissions": [
+                        {
+                            "id": 999,
+                            "created_at": "2026-11-24T10:00:00.000000-08:00",
+                            "score": "8.5",
+                            "status": "processed",
+                        },
+                        {"id": 998, "created_at": "2026-11-23T09:00:00-08:00", "score": None},
+                    ]
+                }
+            ),
+        )
         subs = client.list_submissions("111", "777")
         assert [s.id for s in subs] == ["999", "998"]
         assert subs[0].score == 8.5
         assert subs[0].submitted_at is not None
+        assert subs[0].status == "processed"
+
+    def test_list_submissions_html_fallback(
+        self, session: FakeSession, client: GradescopeClient
+    ) -> None:
+        # .json endpoint missing (404) -> parse submission links from the HTML page
+        session.add("GET", "/courses/111/assignments/777", FakeResponse(text=ASSIGNMENT_PAGE))
+        subs = client.list_submissions("111", "777")
+        assert [s.id for s in subs] == ["999", "998"]
+        assert subs[0].score == 8.5
 
 
 class TestAutograder:

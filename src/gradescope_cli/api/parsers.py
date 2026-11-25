@@ -472,36 +472,85 @@ def parse_submission_json(data: Any, submission_id: str) -> AutograderResult | N
         return None
     nested = data.get("submission")
     src: dict[str, Any] = nested if isinstance(nested, dict) else data
-    score = _as_float(src.get("score"))
-    max_score = _as_float(src.get("max_score"))
-    if score is None and max_score is None:
+    sub = src.get("assignment_submission")
+    sub = sub if isinstance(sub, dict) else {}
+    assignment = src.get("assignment")
+    assignment = assignment if isinstance(assignment, dict) else {}
+    # Real shape: assignment_submission.score + assignment.total_points +
+    # autograder_results.tests; older shape: top-level score/max_score.
+    score = _as_float(sub.get("score"))
+    if score is None:
+        score = _as_float(src.get("score"))
+    max_score = _as_float(assignment.get("total_points"))
+    if max_score is None:
+        max_score = _as_float(src.get("max_score"))
+    has_status = bool(sub.get("status")) or "status" in src
+    if score is None and max_score is None and not has_status:
         return None
-    raw_status = str(src.get("status") or ("graded" if score is not None else "pending")).lower()
-    if raw_status in {"graded", "complete", "completed"} or score is not None:
+    raw_status = str(
+        sub.get("status") or src.get("status") or ("graded" if score is not None else "pending")
+    ).lower()
+    if raw_status in {"graded", "complete", "completed", "processed", "done"} or score is not None:
         status = "graded"
     elif raw_status in {"error", "failed"}:
         status = "error"
     else:
         status = "pending"
     test_cases: list[TestCaseResult] = []
-    questions = src.get("submission_questions") or src.get("questions") or []
-    if isinstance(questions, list):
-        for q in questions:
-            if not isinstance(q, dict):
+    agr = src.get("autograder_results")
+    if isinstance(agr, dict) and isinstance(agr.get("tests"), list):
+        # Real shape: autograder_results.tests = [{name, score, max_score, status, ...}]
+        for t in agr["tests"]:
+            if not isinstance(t, dict):
                 continue
-            name = q.get("name") or q.get("title")
-            if name is None and q.get("question_number") is not None:
-                name = f"Question {q['question_number']}"
-            name = str(name or "")
-            q_score = _as_float(q.get("score"))
-            q_max = _as_float(q.get("max_score"))
-            if q_score is not None and q_max is not None and q_max > 0:
-                case_status = "passed" if q_score >= q_max else "failed"
-            else:
-                case_status = "unknown"
+            t_score = _as_float(t.get("score"))
+            t_max = _as_float(t.get("max_score"))
+            t_status = str(t.get("status") or "")
+            if not t_status and t_score is not None and t_max is not None and t_max > 0:
+                t_status = "passed" if t_score >= t_max else "failed"
+            if not t_status:
+                t_status = "unknown"
             test_cases.append(
-                TestCaseResult(name=name, score=q_score, max_score=q_max, status=case_status)
+                TestCaseResult(
+                    name=str(t.get("name") or ""),
+                    score=t_score,
+                    max_score=t_max,
+                    status=t_status,
+                )
             )
+    else:
+        questions = src.get("submission_questions") or []
+        if isinstance(questions, list):
+            for q in questions:
+                if not isinstance(q, dict):
+                    continue
+                name = q.get("name") or q.get("title")
+                if name is None and q.get("question_number") is not None:
+                    name = f"Question {q['question_number']}"
+                name = str(name or "")
+                q_score = _as_float(q.get("score"))
+                q_max = _as_float(q.get("max_score"))
+                if q_score is not None and q_max is not None and q_max > 0:
+                    case_status = "passed" if q_score >= q_max else "failed"
+                else:
+                    case_status = "unknown"
+                test_cases.append(
+                    TestCaseResult(name=name, score=q_score, max_score=q_max, status=case_status)
+                )
+        else:
+            # question_submissions + questions titles
+            q_titles = {
+                str(q.get("id")): str(q.get("title") or q.get("numbered_title") or "")
+                for q in (src.get("questions") or [])
+                if isinstance(q, dict)
+            }
+            for qs in src.get("question_submissions") or []:
+                if not isinstance(qs, dict):
+                    continue
+                qid = str(qs.get("question_id") or "")
+                name = q_titles.get(qid) or (f"Question {qid}" if qid else "")
+                q_score = _as_float(qs.get("score"))
+                test_cases.append(TestCaseResult(name=name, score=q_score))
     return AutograderResult(
         submission_id=submission_id,
         status=status,
@@ -509,6 +558,62 @@ def parse_submission_json(data: Any, submission_id: str) -> AutograderResult | N
         max_score=max_score,
         test_cases=test_cases,
     )
+
+
+def parse_assignment_page_props(html: str) -> dict[str, Any] | None:
+    """Extract the embedded ``AssignmentSubmissionViewer`` React props JSON."""
+    soup = BeautifulSoup(html, "html.parser")
+    div = soup.find("div", attrs={"data-react-class": "AssignmentSubmissionViewer"})
+    if div is None:
+        return None
+    raw = div.get("data-react-props")
+    if not isinstance(raw, str):
+        return None
+    try:
+        props = json.loads(raw)
+    except json.JSONDecodeError:
+        return None
+    return props if isinstance(props, dict) else None
+
+
+def parse_past_submissions_json(data: Any, course_id: str, assignment_id: str) -> list[Submission]:
+    """Parse ``{"past_submissions": [...]}`` from ``<submission_path>.json``."""
+    if not isinstance(data, dict):
+        return []
+    raw_list = data.get("past_submissions")
+    if not isinstance(raw_list, list):
+        return []
+    result: list[Submission] = []
+    for item in raw_list:
+        if not isinstance(item, dict):
+            continue
+        sid = str(item.get("id") or "")
+        if not sid:
+            continue
+        submitted_at: datetime | None = None
+        created = item.get("created_at")
+        if isinstance(created, str):
+            try:
+                submitted_at = datetime.fromisoformat(created).replace(tzinfo=None)
+            except ValueError:
+                submitted_at = None
+        score = _as_float(item.get("score"))
+        raw_status = str(item.get("status") or ("graded" if score is not None else "submitted"))
+        show_path = item.get("show_path")
+        result.append(
+            Submission(
+                id=sid,
+                course_id=course_id,
+                assignment_id=assignment_id,
+                submitted_at=submitted_at,
+                score=score,
+                status=raw_status,
+                url=show_path
+                if isinstance(show_path, str) and show_path
+                else f"/courses/{course_id}/assignments/{assignment_id}/submissions/{sid}",
+            )
+        )
+    return result
 
 
 def parse_submissions(html: str, course_id: str, assignment_id: str) -> list[Submission]:

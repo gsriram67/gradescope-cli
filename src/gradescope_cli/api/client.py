@@ -284,8 +284,34 @@ class GradescopeClient:
         )
 
     def list_submissions(self, course_id: str, assignment_id: str) -> list[Submission]:
-        """List the account's submissions for an assignment (from its page)."""
+        """List the account's submissions for an assignment.
+
+        Prefers the full history from the React JSON endpoint
+        (``<submission_path>.json?content=react&only_keys[]=past_submissions``);
+        falls back to parsing submission links out of the HTML page.
+        """
         page = self._get(f"/courses/{course_id}/assignments/{assignment_id}")
+        props = parsers.parse_assignment_page_props(page.text)
+        submission_path: str | None = None
+        if props is not None:
+            paths = props.get("paths")
+            if isinstance(paths, dict) and isinstance(paths.get("submission_path"), str):
+                submission_path = paths["submission_path"]
+        if submission_path:
+            try:
+                resp = self._session.get(
+                    self._url(submission_path + ".json"),
+                    params={"content": "react", "only_keys[]": "past_submissions"},
+                    timeout=self.timeout,
+                )
+                if resp.status_code == 200:
+                    subs = parsers.parse_past_submissions_json(
+                        resp.json(), course_id, assignment_id
+                    )
+                    if subs:
+                        return subs
+            except (APIError, ValueError, NotImplementedError):
+                pass
         return parsers.parse_submissions(page.text, course_id, assignment_id)
 
     # -- autograder ------------------------------------------------------------
@@ -299,16 +325,16 @@ class GradescopeClient:
         back to parsing the HTML submission page.
         """
         base = f"/courses/{course_id}/assignments/{assignment_id}/submissions/{submission_id}"
-        try:
-            resp = self._session.get(
-                self._url(base + ".json"), params={"content": "react"}, timeout=self.timeout
-            )
-            if resp.status_code == 200:
-                result = parsers.parse_submission_json(resp.json(), submission_id)
-                if result is not None:
-                    return result
-        except (APIError, ValueError, NotImplementedError):
-            pass  # JSON unavailable -> fall back to the HTML page
+        json_attempts = ((base + "/status.json", None), (base + ".json", {"content": "react"}))
+        for json_path, params in json_attempts:
+            try:
+                resp = self._session.get(self._url(json_path), params=params, timeout=self.timeout)
+                if resp.status_code == 200:
+                    result = parsers.parse_submission_json(resp.json(), submission_id)
+                    if result is not None:
+                        return result
+            except (APIError, ValueError, NotImplementedError):
+                continue  # try the next JSON endpoint, then the HTML page
         page = self._get(base)
         status = parsers.parse_submission_status(page.text)
         return AutograderResult(
