@@ -241,7 +241,7 @@ def _find_due_date_in(row: Tag) -> datetime | None:
         raw = time_el.get("datetime")
         if isinstance(raw, str):
             try:
-                parsed = datetime.fromisoformat(raw)
+                parsed = _fromisoformat(raw)
             except ValueError:
                 continue
             dates.append(parsed.replace(tzinfo=None))
@@ -253,13 +253,20 @@ def _find_due_date_in(row: Tag) -> datetime | None:
     return max(dates) if dates else None
 
 
+def _fromisoformat(value: str) -> datetime:
+    """``datetime.fromisoformat`` that also accepts a trailing "Z" on Python 3.10."""
+    if value.endswith("Z"):
+        value = value[:-1] + "+00:00"
+    return datetime.fromisoformat(value)
+
+
 def _parse_time_datetime(tag: Tag) -> datetime | None:
     """Parse a ``<time datetime="...">`` attribute into a naive datetime."""
     raw = tag.get("datetime")
     if not isinstance(raw, str):
         return None
     try:
-        return datetime.fromisoformat(raw).replace(tzinfo=None)
+        return _fromisoformat(raw).replace(tzinfo=None)
     except ValueError:
         return None
 
@@ -441,7 +448,7 @@ def parse_assignments_react(html: str, course_id: str) -> list[Assignment]:
             raw_due = window.get("due_date") or window.get("hard_due_date")
             if isinstance(raw_due, str):
                 try:
-                    due_date = datetime.fromisoformat(raw_due).replace(tzinfo=None)
+                    due_date = _fromisoformat(raw_due).replace(tzinfo=None)
                 except ValueError:
                     due_date = None
         status = "submitted" if row.get("student_submission") else "open"
@@ -608,7 +615,7 @@ def parse_past_submissions_json(data: Any, course_id: str, assignment_id: str) -
         created = item.get("created_at")
         if isinstance(created, str):
             try:
-                submitted_at = datetime.fromisoformat(created).replace(tzinfo=None)
+                submitted_at = _fromisoformat(created).replace(tzinfo=None)
             except ValueError:
                 submitted_at = None
         score = _as_float(item.get("score"))
