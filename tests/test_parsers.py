@@ -95,7 +95,8 @@ class TestParseCourses:
 class TestParseAssignments:
     def test_student_dashboard_table(self) -> None:
         assignments = parsers.parse_assignments(DASHBOARD_PAGE, "111")
-        assert [a.id for a in assignments] == ["777", "888", "999"]
+        # includes rows from the separate "past assignments" table too
+        assert [a.id for a in assignments] == ["777", "888", "999", "555"]
         assert assignments[0].title == "Homework 1"  # from button[data-assignment-id]
         # due date comes from time.submissionTimeChart--dueDate datetime attr
         assert assignments[0].due_date == datetime(2026, 11, 25, 23, 59)
@@ -108,6 +109,12 @@ class TestParseAssignments:
         assert assignments[1].status == "submitted"
         assert assignments[1].score is None
         assert assignments[2].status == "open"
+        # past assignment from the other table: graded, full score
+        past = assignments[3]
+        assert past.title == "Homework 0"
+        assert past.status == "graded"
+        assert past.score == 10.0
+        assert past.due_date == datetime(2026, 10, 1, 23, 59)
 
     def test_react_assignments_page(self) -> None:
         assignments = parsers.parse_assignments_react(ASSIGNMENTS_REACT_PAGE, "111")

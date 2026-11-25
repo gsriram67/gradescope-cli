@@ -286,53 +286,52 @@ def parse_assignments(html: str, course_id: str) -> list[Assignment]:
             )
         )
 
-    # Current student dashboard: table#assignments-student-table, where the
-    # title cell holds a <button data-assignment-id=...> (not an <a href>).
-    student_table = soup.find("table", id="assignments-student-table")
-    if student_table is not None:
-        for tr in student_table.find_all("tr"):
+    # Student dashboard rows — in ANY table/section on the page (active and
+    # past assignments may live in separate tables). The title cell holds a
+    # <button data-assignment-id=...> (not an <a href>).
+    for tr in soup.find_all("tr"):
+        btn = tr.find(lambda tag: tag.has_attr("data-assignment-id"))
+        if btn is not None:
+            aid = str(btn["data-assignment-id"])
+            title = btn.get_text(strip=True)
+        else:
             th = tr.find("th", class_=lambda c: c is not None and "primaryLink" in str(c))
             if th is None:
                 continue
-            btn = th.find("button", attrs={"data-assignment-id": True})
-            if btn is not None:
-                aid = str(btn["data-assignment-id"])
-                title = btn.get_text(strip=True) or th.get_text(strip=True)
-            else:
-                a = th.find("a", href=True)
-                if a is None:
-                    continue
-                href = a["href"]
-                if not isinstance(href, str):
-                    continue
-                m = href_re.match(href)
-                if m is None:
-                    continue
-                aid, title = m.group(1), th.get_text(" ", strip=True)
-            if aid in seen or not title:
+            a = th.find("a", href=True)
+            if a is None:
                 continue
-            seen.add(aid)
-            due_dates = [
-                d
-                for t in tr.find_all("time", class_=lambda c: c is not None and "dueDate" in str(c))
-                if (d := _parse_time_datetime(t)) is not None
-            ]
-            due_date = max(due_dates) if due_dates else _find_due_date_in(tr)
-            status, score, max_score = _parse_submission_status_cell(tr)
-            assignments.append(
-                Assignment(
-                    id=aid,
-                    course_id=course_id,
-                    title=title,
-                    due_date=due_date,
-                    status=status,
-                    score=score,
-                    max_score=max_score,
-                    url=f"/courses/{course_id}/assignments/{aid}",
-                )
+            href = a["href"]
+            if not isinstance(href, str):
+                continue
+            m = href_re.match(href)
+            if m is None:
+                continue
+            aid, title = m.group(1), th.get_text(" ", strip=True)
+        if aid in seen or not title:
+            continue
+        seen.add(aid)
+        due_dates = [
+            d
+            for t in tr.find_all("time", class_=lambda c: c is not None and "dueDate" in str(c))
+            if (d := _parse_time_datetime(t)) is not None
+        ]
+        due_date = max(due_dates) if due_dates else _find_due_date_in(tr)
+        status, score, max_score = _parse_submission_status_cell(tr)
+        assignments.append(
+            Assignment(
+                id=aid,
+                course_id=course_id,
+                title=title,
+                due_date=due_date,
+                status=status,
+                score=score,
+                max_score=max_score,
+                url=f"/courses/{course_id}/assignments/{aid}",
             )
-        if assignments:
-            return assignments
+        )
+    if assignments:
+        return assignments
 
     # Older dashboard markup: rows tr[role="row"]; first cell holds the link.
     for tr in soup.find_all("tr", attrs={"role": "row"}):

@@ -92,6 +92,24 @@ DASHBOARD_PAGE = """
       </tr>
     </tbody>
   </table>
+  <h2>Past assignments</h2>
+  <table class="table" id="assignments-past-table">
+    <tbody>
+      <tr>
+        <th class="table--primaryLink">
+          <button data-assignment-id="555"
+                  data-post-url="/courses/111/assignments/555/submissions">Homework 0</button>
+        </th>
+        <td class="submissionStatus submissionStatus-complete">
+          <div class="submissionStatus--score">10 / 10</div>
+        </td>
+        <td>
+          <time class="submissionTimeChart--dueDate"
+                datetime="2026-10-01T23:59:00-07:00"></time>
+        </td>
+      </tr>
+    </tbody>
+  </table>
 </body></html>
 """
 
