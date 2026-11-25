@@ -37,12 +37,12 @@ class GradescopeApp(App[None]):
         background: $success;
     }
     #cases {
-        height: auto;
-        max-height: 30%;
+        height: 3fr;
+        min-height: 5;
     }
     #submissions {
-        height: auto;
-        max-height: 30%;
+        height: 2fr;
+        min-height: 4;
     }
     DataTable {
         height: 1fr;
