@@ -259,12 +259,21 @@ class CoursesScreen(GradescopeScreen):
 
     BINDINGS = [
         Binding("r", "reload", "Refresh"),
+        Binding("L", "logout", "Forget saved creds"),
         Binding("q", "app.quit", "Quit"),
     ]
 
     def __init__(self) -> None:
         super().__init__()
         self._default_hint = ""
+
+    def action_logout(self) -> None:
+        from gradescope_cli.config import clear_cached_credentials, credentials_path
+
+        if clear_cached_credentials():
+            self.app.notify(f"cleared saved credentials ({credentials_path()})", title="Logout")
+        else:
+            self.app.notify("no saved credentials to clear", title="Logout")
 
     def compose(self) -> ComposeResult:
         yield Header()

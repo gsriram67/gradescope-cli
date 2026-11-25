@@ -16,7 +16,7 @@ dependencies = [
 ]
 
 [project.scripts]
-gradescope = "gradescope_cli.cli.app:main"
+gradescope = "gradescope_cli.app:main"
 
 [dependency-groups]
 dev = [

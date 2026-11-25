@@ -25,7 +25,7 @@ from gradescope_cli.tui.screens import (
     LoginScreen,
     SubmitModal,
 )
-from tests.test_cli import FakeClient
+from tests.fakes import FakeClient
 
 
 def run(coro: Coroutine[Any, Any, Any]) -> Any:

@@ -1,0 +1,3 @@
+option: cli
+repo: https://github.com/gsriram67/gradescope-cli
+
