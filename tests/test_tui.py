@@ -472,6 +472,56 @@ def test_assignment_screen_lists_and_tracks_submissions() -> None:
     run(go())
 
 
+def test_submit_modal_file_picker(tmp_path: Path) -> None:
+    """The submit modal is a directory tree; enter on a file selects it (✓)."""
+    from gradescope_cli.tui.screens import SubmitModal
+    from gradescope_cli.tui.widgets import PickerTree as DirectoryTree
+
+    (tmp_path / "solution.py").write_text("x = 1\n")
+    (tmp_path / "notes.txt").write_text("hi\n")
+    app, _ = make_app()
+
+    async def go() -> None:
+        result: dict[str, object] = {}
+
+        def cb(paths: list[Path] | None) -> None:
+            result["paths"] = paths
+
+        async with app.run_test(size=(100, 30)) as pilot:
+            await wait_for(pilot, lambda: rows_loaded(app))
+            app.push_screen(SubmitModal(root=tmp_path), callback=cb)
+
+            def picker_ready() -> bool:
+                try:
+                    return isinstance(app.screen, SubmitModal) and bool(
+                        app.screen.query_one("#picker", DirectoryTree)
+                    )
+                except NoMatches:
+                    return False
+
+            await wait_for(pilot, picker_ready)
+            tree = app.screen.query_one("#picker", DirectoryTree)
+            await wait_for(pilot, lambda: len(tree.root.children) >= 2)
+            target = tmp_path / "solution.py"
+            index = next(
+                i
+                for i, line in enumerate(tree._tree_lines)
+                if getattr(line.path[-1].data, "path", None) == target
+            )
+            await pilot.press(*(["j"] * (index + 1)))  # cursor starts at -1
+            await pilot.pause(0.1)
+            assert tree.cursor_line == index
+            await pilot.press("enter")  # toggle file selection
+            await pilot.pause(0.2)
+            sel = app.screen.query_one("#selected", Static)
+            assert "solution.py" in str(sel.content)
+            await pilot.click("#submit")
+            await wait_for(pilot, lambda: "paths" in result)
+        assert result["paths"] == [target]
+
+    run(go())
+
+
 def test_submit_flow_watches_autograder(tmp_path: Path) -> None:
     code = tmp_path / "solution.py"
     code.write_text("print('hi')\n")
@@ -487,7 +537,7 @@ def test_submit_flow_watches_autograder(tmp_path: Path) -> None:
             await pilot.press("s")  # submit modal for highlighted assignment
             await wait_for(pilot, lambda: isinstance(app.screen, SubmitModal))
             app.screen.query_one("#paths", Input).value = str(code)
-            await pilot.press("enter")  # submit the modal
+            await pilot.click("#submit")  # submit the modal
             # assignment screen opens and auto-submits, then watches autograder
             await wait_for(pilot, lambda: isinstance(app.screen, AssignmentScreen))
             screen = app.screen
@@ -516,7 +566,7 @@ def test_submit_modal_rejects_missing_files(tmp_path: Path) -> None:
             await pilot.press("s")
             await wait_for(pilot, lambda: isinstance(app.screen, SubmitModal))
             app.screen.query_one("#paths", Input).value = str(tmp_path / "nope.py")
-            await pilot.press("enter")
+            await pilot.click("#submit")
             await pilot.pause(0.2)
             # modal stays open, nothing submitted
             assert isinstance(app.screen, SubmitModal)

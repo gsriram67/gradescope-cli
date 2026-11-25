@@ -67,8 +67,9 @@ Keys:
 - assignments (due date, status, score): `j/k` move · `enter` open · `s` submit · `l` leaderboard · `/` filter by name · `r` refresh · `h`/`esc` back
 - leaderboard (per-category columns + total): `j/k` move · `/` filter by name · `r` refresh · `h`/`esc` back
 - assignment (progress bar + per-test-case bars + your submissions):
-  `enter` on a submission tracks its autograder · `s` submit files · `g` autograder status · `l` leaderboard · `esc` back
+  `enter` on a submission tracks its autograder · `s` submit files · `g` autograder status · `l` leaderboard · `h`/`esc` back
   (submitting automatically watches the autograder until it finishes)
+- submit modal is a **file picker** (directory tree): `j/k`/arrows move, `enter`/`space`/click toggles a file (✓), `▸` folds dirs, `Submit` uploads; a text input remains for typing paths manually
 
 `python -m gradescope_cli ...` works too.
 

@@ -25,6 +25,7 @@ from textual.widgets import (
     Button,
     Checkbox,
     DataTable,
+    DirectoryTree,
     Footer,
     Header,
     Input,
@@ -52,7 +53,7 @@ from gradescope_cli.render import (
     score_text,
     status_label,
 )
-from gradescope_cli.tui.widgets import NavTree, RowClickTable
+from gradescope_cli.tui.widgets import NavTree, PickerTree, RowClickTable
 
 if TYPE_CHECKING:
     from gradescope_cli.tui.app import GradescopeApp
@@ -769,7 +770,12 @@ class LeaderboardScreen(GradescopeScreen):
 
 
 class SubmitModal(ModalScreen[list[Path] | None]):
-    """Asks for the file paths to submit."""
+    """File picker for submissions.
+
+    A DirectoryTree of ``root`` (default: cwd): move with j/k/arrows, press
+    enter/space or click a file to toggle it (✓), ▸ folds/unfolds directories.
+    The text input remains as a manual fallback for typing paths.
+    """
 
     BINDINGS = [Binding("escape", "cancel", "Cancel")]
 
@@ -777,20 +783,53 @@ class SubmitModal(ModalScreen[list[Path] | None]):
     SubmitModal {
         align: center middle;
     }
-    SubmitModal > Vertical {
-        width: 70;
-        height: auto;
+    #submit-box {
+        width: 90%;
+        height: 85%;
         padding: 1 2;
         border: solid $primary;
         background: $surface;
     }
+    #picker {
+        height: 1fr;
+    }
+    #selected {
+        height: auto;
+        color: $text-muted;
+    }
     """
 
+    def __init__(self, root: Path | None = None) -> None:
+        super().__init__()
+        self.root = root or Path.cwd()
+        self._selected: set[Path] = set()
+
     def compose(self) -> ComposeResult:
-        with Vertical():
-            yield Label("Files to submit (comma or space separated):")
-            yield Input(id="paths", placeholder="solution.py, utils/helpers.py")
+        with Vertical(id="submit-box"):
+            yield Label("Pick files — j/k/arrows move · enter/space toggles ✓ · ▸ folds dirs")
+            yield PickerTree(self.root, id="picker")
+            yield Static("selected: none", id="selected")
+            yield Input(id="paths", placeholder="…or type paths manually (comma/space separated)")
             yield Button("Submit", id="submit", variant="primary")
+
+    def on_mount(self) -> None:
+        self.query_one("#picker", PickerTree).focus()
+
+    @on(DirectoryTree.FileSelected, "#picker")
+    def _toggle_file(self, event: DirectoryTree.FileSelected) -> None:
+        path = event.path
+        if path in self._selected:
+            self._selected.discard(path)
+        else:
+            self._selected.add(path)
+        self._refresh_labels(event.node)
+
+    def _refresh_labels(self, node: Any) -> None:
+        path = getattr(node.data, "path", None)
+        name = path.name if isinstance(path, Path) else str(node.label)
+        node.label = Text(f"✓ {name}", style="green") if path in self._selected else Text(name)
+        names = ", ".join(sorted(p.name for p in self._selected)) or "none"
+        self.query_one("#selected", Static).update(f"selected: {names}")
 
     @on(Button.Pressed, "#submit")
     def _on_submit_button(self) -> None:
@@ -802,7 +841,8 @@ class SubmitModal(ModalScreen[list[Path] | None]):
 
     def _dismiss_with_paths(self) -> None:
         raw = self.query_one("#paths", Input).value
-        paths = [Path(p) for p in raw.replace(",", " ").split()]
+        manual = [Path(p) for p in raw.replace(",", " ").split()] if raw.strip() else []
+        paths = list(self._selected) + [p for p in manual if p not in self._selected]
         if not paths:
             self.dismiss(None)
             return

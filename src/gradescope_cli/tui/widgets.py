@@ -7,7 +7,7 @@ from typing import Any
 from textual import events
 from textual.binding import Binding
 from textual.coordinate import Coordinate
-from textual.widgets import DataTable, Tree
+from textual.widgets import DataTable, DirectoryTree, Tree
 
 # Vim-style navigation, added to tables and trees.
 VIM_NAV_BINDINGS: list[Binding] = [
@@ -48,3 +48,9 @@ class NavTree(Tree[Any]):
     """Tree with vim j/k cursor movement."""
 
     BINDINGS = [*Tree.BINDINGS, *VIM_NAV_BINDINGS]
+
+
+class PickerTree(DirectoryTree):
+    """DirectoryTree with vim j/k cursor movement."""
+
+    BINDINGS = [*DirectoryTree.BINDINGS, *VIM_NAV_BINDINGS]
