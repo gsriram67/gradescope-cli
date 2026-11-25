@@ -269,14 +269,13 @@ def test_navigate_to_assignments() -> None:
             screen = app.screen
             assert isinstance(screen, AssignmentsScreen)
             assert screen.course.id == "111"
-            # score column renders a graphical bar for the graded assignment
+            # score column: colored text (no bar); 8.5/10 = 85% -> green
             row = app.screen.query_one(DataTable).get_row_at(0)
-            assert "█" in str(row[4]) and "8.5/10" in str(row[4])
+            assert "8.5/10" in str(row[4]) and "█" not in str(row[4])
+            assert "green" in str(row[4].style)
             assert str(row[3]) == "graded"
             # due column has a relative hint ("in 1 day" / "overdue ...")
             assert "·" in str(row[2])
-            # 8.5/10 = 85% -> green bar (Rich span style)
-            assert any(str(span.style) == "green" for span in row[4].spans)
 
     run(go())
 

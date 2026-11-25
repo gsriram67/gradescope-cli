@@ -48,7 +48,6 @@ from gradescope_cli.render import (
     due_style,
     due_text,
     fmt_number,
-    score_bar,
     score_style,
     score_text,
     status_label,
@@ -69,13 +68,11 @@ def due_cell(due: datetime | None) -> Text:
     return Text(due_compact(due, now=now), style=due_style(due, now=now))
 
 
-def score_cell(score: float | None, max_score: float | None, bar_width: int = 8) -> Text:
-    """Styled score cell: colored bar + "8.5/10 (85%)"."""
+def score_cell(score: float | None, max_score: float | None) -> Text:
+    """Colored score text, e.g. green "8.5/10 (85%)" (no bar)."""
     if score is None or max_score is None:
         return Text("-", style="dim")
-    bar = Text(f"{score_bar(score, max_score, width=bar_width)} {score_text(score, max_score)}")
-    bar.stylize(score_style(score, max_score))
-    return bar
+    return Text(score_text(score, max_score), style=score_style(score, max_score))
 
 
 class GradescopeScreen(Screen[None]):
@@ -306,12 +303,6 @@ class AssignmentsScreen(GradescopeScreen):
 
     def on_mount(self) -> None:
         self._default_hint = str(self.query_one(".hint", Static).content)
-        table = self.query_one(DataTable)
-        table.add_column("ID", key="id", width=9)
-        table.add_column("Assignment", key="title")
-        table.add_column("Due", key="due", width=24)
-        table.add_column("Status", key="status", width=9)
-        table.add_column("Score", key="score", width=23)
         self.set_hint(f"loading assignments for {self.course.name}...")
         self.reload_assignments()
 
@@ -326,7 +317,27 @@ class AssignmentsScreen(GradescopeScreen):
 
     def populate_assignments(self, assignments: list[Assignment]) -> None:
         table = self.query_one(DataTable)
-        table.clear()
+        table.clear(columns=True)
+        # Size the Due/Score columns to their content, widening when the
+        # terminal has room and shrinking (table scrolls/clips) when narrow.
+        avail = self.app.size.width
+        due_texts = [due_compact(a.due_date) for a in assignments]
+        score_texts = [
+            score_text(a.score, a.max_score) if a.score is not None else "-" for a in assignments
+        ]
+        due_w = min(max([len(t) for t in due_texts] + [3]), 26)
+        score_w = min(max([len(t) for t in score_texts] + [5]), 22)
+        fixed = 9 + 9 + 15  # ID + Status + min Assignment column
+        if avail < fixed + due_w + score_w:
+            overflow = fixed + due_w + score_w - avail
+            score_w = max(10, score_w - overflow)
+            overflow = fixed + due_w + score_w - avail
+            due_w = max(16, due_w - max(0, overflow))
+        table.add_column("ID", key="id", width=9)
+        table.add_column("Assignment", key="title")
+        table.add_column("Due", key="due", width=due_w)
+        table.add_column("Status", key="status", width=9)
+        table.add_column("Score", key="score", width=score_w)
         self._assignments = {}
         for assignment in assignments:
             table.add_row(
@@ -421,12 +432,12 @@ class AssignmentScreen(GradescopeScreen):
         submissions = self.query_one("#submissions", DataTable)
         submissions.add_column("Submission", key="id", width=12)
         submissions.add_column("Submitted", key="when")
-        submissions.add_column("Score", key="score", width=23)
+        submissions.add_column("Score", key="score", width=18)
         cases = self.query_one("#cases", DataTable)
         cases.display = False
         cases.add_column("Test case", key="name")
         cases.add_column("Result", key="result", width=9)
-        cases.add_column("Score", key="score", width=23)
+        cases.add_column("Score", key="score", width=18)
         self.load_submissions_worker()
         submissions.focus()
         if self._submit_paths is not None:
