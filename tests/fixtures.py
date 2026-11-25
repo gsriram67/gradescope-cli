@@ -197,6 +197,21 @@ SUBMISSION_PAGE_GRADED = """
 </body></html>
 """
 
+LEADERBOARD_REACT_PAGE = """
+<html><body>
+  <div data-react-class="Leaderboard"
+       data-react-props='{"columns": [{"name": "task 1", "order": "desc"},
+                                       {"name": "task 2", "order": "desc"}],
+                           "entries": [
+                             {"name": "Alice", "assignment_submission_id": 1001,
+                              "task 1": 90.5, "task 1 (private)": 90.5, "task 2": 9.0},
+                             {"name": "Bob", "assignment_submission_id": 1002,
+                              "task 1": 80.0, "task 2": null}
+                           ]}'>
+  </div>
+</body></html>
+"""
+
 LEADERBOARD_PAGE = """
 <html><body>
   <table class="leaderboard-table">

@@ -226,6 +226,22 @@ def test_navigate_to_assignments() -> None:
     run(go())
 
 
+def test_click_opens_assignment() -> None:
+    """A single mouse click on a row should open it (RowClickTable)."""
+    app, _ = make_app()
+
+    async def go() -> None:
+        async with app.run_test(size=(100, 30)) as pilot:
+            await wait_for(pilot, lambda: table_rows(app) == 2)  # courses
+            await pilot.press("enter")
+            await wait_for(pilot, lambda: isinstance(app.screen, AssignmentsScreen))
+            await wait_for(pilot, lambda: table_rows(app) == 2)  # assignments
+            await pilot.click(DataTable, offset=(8, 1))  # first data row
+            await wait_for(pilot, lambda: isinstance(app.screen, AssignmentScreen))
+
+    run(go())
+
+
 def test_open_assignment_and_leaderboard() -> None:
     app, _ = make_app()
 

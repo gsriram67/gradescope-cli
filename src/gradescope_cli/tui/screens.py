@@ -52,6 +52,7 @@ from gradescope_cli.render import (
     status_label,
     status_style,
 )
+from gradescope_cli.tui.widgets import RowClickTable
 
 if TYPE_CHECKING:
     from gradescope_cli.tui.app import GradescopeApp
@@ -198,7 +199,6 @@ class CoursesScreen(GradescopeScreen):
     """Lists all courses; enter opens one."""
 
     BINDINGS = [
-        Binding("enter", "open_course", "Open"),
         Binding("r", "reload", "Refresh"),
         Binding("q", "app.quit", "Quit"),
     ]
@@ -211,7 +211,7 @@ class CoursesScreen(GradescopeScreen):
     def compose(self) -> ComposeResult:
         yield Header()
         yield Static("Courses  (enter: open · r: refresh · q: quit)", classes="hint")
-        yield DataTable(cursor_type="row")
+        yield RowClickTable(cursor_type="row")
         yield Footer()
 
     def on_mount(self) -> None:
@@ -270,7 +270,6 @@ class AssignmentsScreen(GradescopeScreen):
     """Lists assignments of a course with due dates."""
 
     BINDINGS = [
-        Binding("enter", "open_assignment", "Open"),
         Binding("s", "submit", "Submit files"),
         Binding("l", "leaderboard", "Leaderboard"),
         Binding("r", "reload", "Refresh"),
@@ -290,7 +289,7 @@ class AssignmentsScreen(GradescopeScreen):
             "enter: open · s: submit · l: leaderboard · r: refresh · esc: back",
             classes="hint",
         )
-        yield DataTable(cursor_type="row")
+        yield RowClickTable(cursor_type="row")
         yield Footer()
 
     def on_mount(self) -> None:
@@ -397,8 +396,8 @@ class AssignmentScreen(GradescopeScreen):
         yield Static(id="info", classes="hint")
         yield ProgressBar(id="progress", total=None)  # indeterminate until graded
         yield Static(id="status")
-        yield DataTable(id="submissions", cursor_type="row")
-        yield DataTable(id="cases", cursor_type="row")
+        yield RowClickTable(id="submissions", cursor_type="row")
+        yield RowClickTable(id="cases", cursor_type="row")
         yield Footer()
 
     def on_mount(self) -> None:
@@ -570,7 +569,7 @@ class LeaderboardScreen(GradescopeScreen):
             f"Leaderboard — {self.assignment.title} (r: refresh · esc: back)",
             classes="hint",
         )
-        yield DataTable(cursor_type="row")
+        yield RowClickTable(cursor_type="row")
         yield Footer()
 
     def on_mount(self) -> None:

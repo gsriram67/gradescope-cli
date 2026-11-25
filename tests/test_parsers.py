@@ -14,6 +14,7 @@ from tests.fixtures import (
     COURSES_PAGE,
     DASHBOARD_PAGE,
     LEADERBOARD_PAGE,
+    LEADERBOARD_REACT_PAGE,
     LOGIN_PAGE,
     SUBMISSION_PAGE_GRADED,
     SUBMISSION_PAGE_PENDING,
@@ -241,3 +242,11 @@ class TestParseLeaderboard:
     def test_missing_table_raises(self) -> None:
         with pytest.raises(ParseError):
             parsers.parse_leaderboard("<html></html>")
+
+    def test_react_leaderboard(self) -> None:
+        entries = parsers.parse_leaderboard_react(LEADERBOARD_REACT_PAGE)
+        assert [(e.rank, e.name) for e in entries] == [(1, "Alice"), (2, "Bob")]
+        assert entries[0].score == 99.5  # sum of public task scores
+        assert entries[0].submission_id == "1001"
+        assert entries[1].score == 80.0
+        assert parsers.parse_leaderboard_react("<html></html>") == []

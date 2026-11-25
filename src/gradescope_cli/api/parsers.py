@@ -621,6 +621,51 @@ def parse_submission_status(html: str) -> SubmissionStatus:
     )
 
 
+_LB_TASK_KEY = re.compile(r"^task \d+$")
+
+
+def parse_leaderboard_react(html: str) -> list[LeaderboardEntry]:
+    """Parse the React leaderboard (``div[data-react-class="Leaderboard"]``).
+
+    Props contain ``entries``: ``{"name": ..., "assignment_submission_id": ...,
+    "task N": score, ...}``. An entry's score is the sum of its public task
+    scores; rank is its position in the list.
+    """
+    soup = BeautifulSoup(html, "html.parser")
+    div = soup.find("div", attrs={"data-react-class": "Leaderboard"})
+    if div is None:
+        return []
+    raw = div.get("data-react-props")
+    if not isinstance(raw, str):
+        return []
+    try:
+        props = json.loads(raw)
+    except json.JSONDecodeError:
+        return []
+    entries = props.get("entries") if isinstance(props, dict) else None
+    if not isinstance(entries, list):
+        return []
+    result: list[LeaderboardEntry] = []
+    for rank, entry in enumerate(entries, start=1):
+        if not isinstance(entry, dict):
+            continue
+        name = str(entry.get("name") or "")
+        score = 0.0
+        for key, value in entry.items():
+            if _LB_TASK_KEY.match(str(key)) and isinstance(value, (int, float)):
+                score += float(value)
+        sid = entry.get("assignment_submission_id")
+        result.append(
+            LeaderboardEntry(
+                rank=rank,
+                name=name,
+                score=score,
+                submission_id=str(sid) if sid is not None else None,
+            )
+        )
+    return result
+
+
 def parse_leaderboard(html: str) -> list[LeaderboardEntry]:
     """Parse an assignment's ``/leaderboard`` page."""
     soup = BeautifulSoup(html, "html.parser")

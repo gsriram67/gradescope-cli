@@ -19,6 +19,7 @@ from tests.fixtures import (
     COURSES_PAGE,
     DASHBOARD_PAGE,
     LEADERBOARD_PAGE,
+    LEADERBOARD_REACT_PAGE,
     LOGIN_PAGE,
     LOGIN_PAGE_FAILED,
     SUBMISSION_PAGE_GRADED,
@@ -283,3 +284,24 @@ class TestLeaderboard:
             (1, "Alice", 99.5),
             (2, "Bob", 87.0),
         ]
+
+    def test_get_leaderboard_react_page(
+        self, session: FakeSession, client: GradescopeClient
+    ) -> None:
+        session.add(
+            "GET",
+            "/courses/111/assignments/777/leaderboard",
+            FakeResponse(text=LEADERBOARD_REACT_PAGE),
+        )
+        entries = client.get_leaderboard("111", "777")
+        assert [(e.rank, e.name, e.score) for e in entries] == [
+            (1, "Alice", 99.5),
+            (2, "Bob", 80.0),
+        ]
+        assert entries[0].submission_id == "1001"
+
+    def test_leaderboard_404_friendly_error(
+        self, session: FakeSession, client: GradescopeClient
+    ) -> None:
+        with pytest.raises(NotFoundError, match="not enabled"):
+            client.get_leaderboard("111", "777")

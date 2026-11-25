@@ -344,6 +344,17 @@ class GradescopeClient:
     # -- leaderboard -----------------------------------------------------------
 
     def get_leaderboard(self, course_id: str, assignment_id: str) -> list[LeaderboardEntry]:
-        """Fetch the leaderboard for an assignment."""
-        page = self._get(f"/courses/{course_id}/assignments/{assignment_id}/leaderboard")
-        return parsers.parse_leaderboard(page.text)
+        """Fetch the leaderboard for an assignment (React page; HTML fallback)."""
+        path = f"/courses/{course_id}/assignments/{assignment_id}/leaderboard"
+        try:
+            page = self._get(path)
+        except NotFoundError as exc:
+            raise NotFoundError(
+                f"no leaderboard for assignment {assignment_id} (not enabled for this course?)",
+                status_code=exc.status_code,
+                url=exc.url,
+            ) from exc
+        entries = parsers.parse_leaderboard_react(page.text)
+        if not entries:
+            entries = parsers.parse_leaderboard(page.text)
+        return entries
