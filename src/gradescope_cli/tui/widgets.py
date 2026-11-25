@@ -5,8 +5,15 @@ from __future__ import annotations
 from typing import Any
 
 from textual import events
+from textual.binding import Binding
 from textual.coordinate import Coordinate
-from textual.widgets import DataTable
+from textual.widgets import DataTable, Tree
+
+# Vim-style navigation, added to tables and trees.
+VIM_NAV_BINDINGS: list[Binding] = [
+    Binding("j", "cursor_down", "Down", show=False),
+    Binding("k", "cursor_up", "Up", show=False),
+]
 
 
 class RowClickTable(DataTable[Any]):
@@ -15,6 +22,8 @@ class RowClickTable(DataTable[Any]):
     Stock textual only emits RowSelected when clicking the already-highlighted
     row (or pressing enter); we want one click to open the row.
     """
+
+    BINDINGS = [*DataTable.BINDINGS, *VIM_NAV_BINDINGS]
 
     async def _on_click(self, event: events.Click) -> None:
         meta = event.style.meta if event.style is not None else None
@@ -33,3 +42,9 @@ class RowClickTable(DataTable[Any]):
             event.stop()
             return
         await super()._on_click(event)
+
+
+class NavTree(Tree[Any]):
+    """Tree with vim j/k cursor movement."""
+
+    BINDINGS = [*Tree.BINDINGS, *VIM_NAV_BINDINGS]

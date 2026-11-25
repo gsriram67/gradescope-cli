@@ -254,6 +254,39 @@ def test_click_course_in_tree_opens_it() -> None:
     run(go())
 
 
+def test_vim_keybinds_navigate() -> None:
+    """j/k move the cursor in tree + table; enter opens; h goes back."""
+    app, _ = make_app()
+
+    async def go() -> None:
+        async with app.run_test(size=(100, 30)) as pilot:
+            await wait_for(pilot, lambda: rows_loaded(app))
+            tree = app.screen.query_one("#courses-tree", Tree)
+            await pilot.press("j", "j")  # cursor -> first course node
+            await pilot.pause(0.1)
+            assert tree.cursor_line == 1
+            await pilot.press("k")  # back to term node
+            await pilot.pause(0.1)
+            assert tree.cursor_line == 0
+            await pilot.press("j")  # -> first course node (line 1)
+            await pilot.pause(0.1)
+            assert tree.cursor_line == 1
+            await pilot.press("enter")
+            await wait_for(pilot, lambda: isinstance(app.screen, AssignmentsScreen))
+            await wait_for(pilot, lambda: table_rows(app) == 2)
+            table = app.screen.query_one(DataTable)
+            await pilot.press("j")
+            await pilot.pause(0.1)
+            assert table.cursor_coordinate.row == 1
+            await pilot.press("k")
+            await pilot.pause(0.1)
+            assert table.cursor_coordinate.row == 0
+            await pilot.press("h")  # back to courses
+            await wait_for(pilot, lambda: isinstance(app.screen, CoursesScreen))
+
+    run(go())
+
+
 def test_navigate_to_assignments() -> None:
     app, _ = make_app()
 

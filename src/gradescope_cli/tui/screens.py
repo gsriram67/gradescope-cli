@@ -53,7 +53,7 @@ from gradescope_cli.render import (
     status_label,
     status_style,
 )
-from gradescope_cli.tui.widgets import RowClickTable
+from gradescope_cli.tui.widgets import NavTree, RowClickTable
 
 if TYPE_CHECKING:
     from gradescope_cli.tui.app import GradescopeApp
@@ -213,15 +213,15 @@ class CoursesScreen(GradescopeScreen):
     def compose(self) -> ComposeResult:
         yield Header()
         yield Static(
-            "Courses — ▸/enter on a term: fold · enter/click a course: open · r: refresh · q: quit",
+            "Courses — j/k: move · ▸/enter on term: fold · enter/click course: open · r · q",
             classes="hint",
         )
-        yield Tree("Courses", id="courses-tree")
+        yield NavTree("Courses", id="courses-tree")
         yield Footer()
 
     def on_mount(self) -> None:
         self._default_hint = str(self.query_one(".hint", Static).content)
-        tree = self.query_one("#courses-tree", Tree)
+        tree = self.query_one("#courses-tree", NavTree)
         tree.show_root = False
         tree.auto_expand = False  # we toggle term nodes ourselves in on_node_selected
         tree.focus()
@@ -238,7 +238,7 @@ class CoursesScreen(GradescopeScreen):
         self.app.call_from_thread(self.populate_courses, courses)
 
     def populate_courses(self, courses: list[Course]) -> None:
-        tree = self.query_one("#courses-tree", Tree)
+        tree = self.query_one("#courses-tree", NavTree)
         tree.clear()
         # group by term, preserving the client's term-descending order
         by_term: dict[str, list[Course]] = {}
@@ -283,6 +283,7 @@ class AssignmentsScreen(GradescopeScreen):
         Binding("l", "leaderboard", "Leaderboard"),
         Binding("r", "reload", "Refresh"),
         Binding("escape", "back", "Back"),
+        Binding("h", "back", "Back", show=False),
     ]
 
     def __init__(self, course: Course) -> None:
@@ -295,7 +296,7 @@ class AssignmentsScreen(GradescopeScreen):
         yield Header()
         yield Static(
             f"{self.course.name} (course {self.course.id}) — "
-            "enter: open · s: submit · l: leaderboard · r: refresh · esc: back",
+            "j/k: move · enter: open · s: submit · l: leaderboard · r: refresh · h/esc: back",
             classes="hint",
         )
         yield RowClickTable(cursor_type="row")
@@ -399,6 +400,7 @@ class AssignmentScreen(GradescopeScreen):
         Binding("g", "grade", "Autograder status"),
         Binding("l", "leaderboard", "Leaderboard"),
         Binding("escape", "back", "Back"),
+        Binding("h", "back", "Back", show=False),
     ]
 
     def __init__(
@@ -427,7 +429,7 @@ class AssignmentScreen(GradescopeScreen):
         self.query_one("#info", Static).update(
             f"{self.assignment.title} (assignment {self.assignment.id}) — "
             f"due {due_text(self.assignment.due_date)} · "
-            "enter: track submission · s: submit · g: autograder · l: leaderboard · esc: back"
+            "j/k: move · enter: track · s: submit · g: autograder · l: leaderboard · h/esc: back"
         )
         submissions = self.query_one("#submissions", DataTable)
         submissions.add_column("Submission", key="id", width=12)
@@ -580,6 +582,7 @@ class LeaderboardScreen(GradescopeScreen):
     BINDINGS = [
         Binding("r", "reload", "Refresh"),
         Binding("escape", "back", "Back"),
+        Binding("h", "back", "Back", show=False),
     ]
 
     def __init__(self, course: Course, assignment: Assignment) -> None:
@@ -591,7 +594,7 @@ class LeaderboardScreen(GradescopeScreen):
     def compose(self) -> ComposeResult:
         yield Header()
         yield Static(
-            f"Leaderboard — {self.assignment.title} (r: refresh · esc: back)",
+            f"Leaderboard — {self.assignment.title} (j/k: move · r: refresh · h/esc: back)",
             classes="hint",
         )
         yield RowClickTable(cursor_type="row")
