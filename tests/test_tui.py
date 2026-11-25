@@ -340,7 +340,9 @@ def test_navigate_to_assignments() -> None:
             row = app.screen.query_one(DataTable).get_row_at(0)
             assert "8.5/10" in str(row[4]) and "█" not in str(row[4])
             assert "green" in str(row[4].style)
-            assert str(row[3]) == "graded"
+            # due cell carries an urgency dot when the date is soon/overdue
+            assert "●" in str(row[2]) or "▲" in str(row[2])
+            assert "graded" in str(row[3])  # status badge chip
             # due column has a relative hint ("in 1 day" / "overdue ...")
             assert "·" in str(row[2])
 

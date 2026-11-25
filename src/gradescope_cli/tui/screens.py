@@ -51,7 +51,6 @@ from gradescope_cli.render import (
     score_style,
     score_text,
     status_label,
-    status_style,
 )
 from gradescope_cli.tui.widgets import NavTree, RowClickTable
 
@@ -62,10 +61,33 @@ POLL_INTERVAL = 3.0
 POLL_TIMEOUT = 600.0
 
 
+_BADGE_STYLES = {
+    "graded": "black on green",
+    "submitted": "black on yellow",
+    "open": "black on cyan",
+    "pending": "black on yellow",
+    "error": "white on red",
+}
+
+
+def status_badge(status: str | None) -> Text:
+    """Status as a colored chip, e.g. [graded] on a green background."""
+    label = status_label(status)
+    style = _BADGE_STYLES.get((status or "").lower(), "dim")
+    return Text(f"[{label}]", style=style)
+
+
 def due_cell(due: datetime | None) -> Text:
-    """Styled compact due-date cell ("10-13 05:00 · overdue 39d")."""
+    """Compact due-date cell with an urgency dot: red ● overdue, yellow ▲ soon."""
     now = datetime.now()
-    return Text(due_compact(due, now=now), style=due_style(due, now=now))
+    style = due_style(due, now=now)
+    cell = Text()
+    if due is not None:
+        cell.append(
+            "● " if style == "red" else ("▲ " if style == "yellow" else ""), style=style or None
+        )
+    cell.append(due_compact(due, now=now), style=style or None)
+    return cell
 
 
 def score_cell(score: float | None, max_score: float | None) -> Text:
@@ -209,6 +231,8 @@ class LoginScreen(GradescopeScreen):
         self.query_one("#login-error", Static).update(message)
 
     def _on_success(self) -> None:
+        if self.client.email:
+            self.app.sub_title = self.client.email
         # "Remember me": cache credentials (0600) unless env vars already provide them.
         if self.query_one("#save", Checkbox).value and self._attempt is not None:
             from gradescope_cli.config import (
@@ -405,7 +429,7 @@ class AssignmentsScreen(GradescopeScreen):
                 Text(assignment.id),
                 Text(assignment.title),
                 due_cell(assignment.due_date),
-                Text(status_label(assignment.status), style=status_style(assignment.status)),
+                status_badge(assignment.status),
                 score_cell(assignment.score, assignment.max_score),
                 key=assignment.id,
             )
@@ -497,14 +521,17 @@ class AssignmentScreen(GradescopeScreen):
             "j/k: move · enter: track · s: submit · g: autograder · l: leaderboard · h/esc: back"
         )
         submissions = self.query_one("#submissions", DataTable)
+        submissions.border_title = "Your submissions"
         submissions.add_column("Submission", key="id", width=12)
         submissions.add_column("Submitted", key="when")
         submissions.add_column("Score", key="score", width=18)
         cases = self.query_one("#cases", DataTable)
         cases.display = False
+        cases.border_title = "Autograder test cases"
         cases.add_column("Test case", key="name")
         cases.add_column("Result", key="result", width=9)
         cases.add_column("Score", key="score", width=18)
+        self.query_one("#status", Static).border_title = "Autograder"
         self.load_submissions_worker()
         submissions.focus()
         if self._submit_paths is not None:
@@ -607,9 +634,8 @@ class AssignmentScreen(GradescopeScreen):
             time.sleep(POLL_INTERVAL)
 
     def _show_result(self, result: AutograderResult) -> None:
-        header = Text(
-            f"status: {status_label(result.status)}", style=status_style(result.status) or "bold"
-        )
+        header = Text("status: ")
+        header.append_text(status_badge(result.status))
         if result.score is not None and result.max_score is not None:
             header.append(f"  score: {score_text(result.score, result.max_score)}")
             header.stylize(score_style(result.score, result.max_score), 7)

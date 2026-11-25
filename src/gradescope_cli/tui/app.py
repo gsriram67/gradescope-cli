@@ -62,6 +62,16 @@ class GradescopeApp(App[None]):
         height: 3;
         padding: 0 2;
     }
+    #status {
+        border: solid $surface-lighten-2;
+        padding: 0 1;
+    }
+    #submissions {
+        border: solid $surface-lighten-2;
+    }
+    #cases {
+        border: solid $surface-lighten-2;
+    }
     """
 
     def __init__(self, client: GradescopeAPI, *, email_hint: str | None = None) -> None:
@@ -70,6 +80,8 @@ class GradescopeApp(App[None]):
         self.email_hint = email_hint
 
     def on_mount(self) -> None:
+        if self.client.email:
+            self.sub_title = self.client.email
         if self.client.is_authenticated:
             self.push_screen(CoursesScreen())
         else:
