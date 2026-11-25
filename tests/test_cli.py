@@ -35,8 +35,8 @@ class FakeClient:
     def list_courses(self) -> list[Course]:
         self.calls.append(("list_courses", ()))
         return [
-            Course(id="111", name="DSC 190 - Capstone Project", code="DSC 190"),
-            Course(id="222", name="CSE 151A", code="CSE 151A"),
+            Course(id="111", name="DSC 190 - Capstone Project", code="DSC 190", term="Fall 2026"),
+            Course(id="222", name="CSE 151A", code="CSE 151A", term="Spring 2026"),
         ]
 
     def list_assignments(self, course_id: str) -> list[Assignment]:
@@ -47,8 +47,11 @@ class FakeClient:
                 course_id=course_id,
                 title="Homework 1",
                 due_date=datetime(2026, 11, 25, 23, 59),
+                status="graded",
+                score=8.5,
+                max_score=10.0,
             ),
-            Assignment(id="888", course_id=course_id, title="Homework 2"),
+            Assignment(id="888", course_id=course_id, title="Homework 2", status="open"),
         ]
 
     def submit(self, course_id: str, assignment_id: str, files: Sequence[str | Path]) -> Submission:
@@ -143,6 +146,7 @@ class TestCommands:
         out = capsys.readouterr().out
         assert "DSC 190 - Capstone Project" in out
         assert "111" in out
+        assert "Fall 2026" in out
         assert fake_client.calls == [("list_courses", ())]
 
     def test_assignments(self, fake_client: FakeClient, capsys: pytest.CaptureFixture[str]) -> None:
@@ -150,7 +154,10 @@ class TestCommands:
         out = capsys.readouterr().out
         assert "Homework 1" in out
         assert "2026-11-25 23:59" in out
-        assert "-" in out  # Homework 2 has no due date
+        assert "graded" in out  # status column
+        assert "8.5/10" in out  # score column
+        assert "open" in out
+        assert "-" in out  # Homework 2 has no due date/score
 
     def test_submit(self, fake_client: FakeClient, capsys: pytest.CaptureFixture[str]) -> None:
         rc = app.main(["submit", "111", "777", "solution.py"], client=fake_client)

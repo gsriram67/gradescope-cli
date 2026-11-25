@@ -19,7 +19,16 @@ from textual.binding import Binding
 from textual.containers import Vertical
 from textual.css.query import NoMatches
 from textual.screen import ModalScreen, Screen
-from textual.widgets import Button, DataTable, Footer, Header, Input, Label, Static
+from textual.widgets import (
+    Button,
+    DataTable,
+    Footer,
+    Header,
+    Input,
+    Label,
+    ProgressBar,
+    Static,
+)
 
 from gradescope_cli.api.client import GradescopeAPI
 from gradescope_cli.api.models import (
@@ -40,6 +49,20 @@ POLL_TIMEOUT = 600.0
 
 def fmt_due(due: datetime | None) -> str:
     return due.strftime("%Y-%m-%d %H:%M") if due is not None else "-"
+
+
+def score_bar(score: float | None, max_score: float | None, width: int = 12) -> str:
+    """Bubbletea-style text progress bar, e.g. ``██████░░░░░░``."""
+    if score is None or max_score is None or max_score <= 0:
+        return "░" * width
+    filled = min(width, max(0, round(score / max_score * width)))
+    return "█" * filled + "░" * (width - filled)
+
+
+def fmt_score(score: float | None, max_score: float | None) -> str:
+    if score is not None and max_score is not None:
+        return f"{score:g}/{max_score:g}"
+    return "-"
 
 
 class GradescopeScreen(Screen[None]):
@@ -167,6 +190,7 @@ class CoursesScreen(GradescopeScreen):
     def on_mount(self) -> None:
         table = self.query_one(DataTable)
         table.add_column("ID", key="id", width=10)
+        table.add_column("Term", key="term", width=12)
         table.add_column("Course", key="name")
         table.add_column("Code", key="code", width=12)
         self.set_hint("loading courses...")
@@ -186,7 +210,9 @@ class CoursesScreen(GradescopeScreen):
         table.clear()
         self._courses = {}
         for course in courses:
-            table.add_row(course.id, course.name, course.code or "", key=course.id)
+            table.add_row(
+                course.id, course.term or "-", course.name, course.code or "", key=course.id
+            )
             self._courses[course.id] = course
         if not courses:
             self.set_hint("No courses found — are you enrolled? (r: retry · q: quit)")
@@ -232,6 +258,8 @@ class AssignmentsScreen(GradescopeScreen):
         table.add_column("ID", key="id", width=10)
         table.add_column("Assignment", key="title")
         table.add_column("Due", key="due", width=18)
+        table.add_column("Status", key="status", width=10)
+        table.add_column("Score", key="score", width=22)
         self.set_hint(f"loading assignments for {self.course.name}...")
         self.reload_assignments()
 
@@ -249,8 +277,19 @@ class AssignmentsScreen(GradescopeScreen):
         table.clear()
         self._assignments = {}
         for assignment in assignments:
+            score_cell = (
+                f"{score_bar(assignment.score, assignment.max_score)} "
+                f"{fmt_score(assignment.score, assignment.max_score)}"
+                if assignment.score is not None
+                else "-"
+            )
             table.add_row(
-                assignment.id, assignment.title, fmt_due(assignment.due_date), key=assignment.id
+                assignment.id,
+                assignment.title,
+                fmt_due(assignment.due_date),
+                assignment.status or "-",
+                score_cell,
+                key=assignment.id,
             )
             self._assignments[assignment.id] = assignment
         if not assignments:
@@ -319,7 +358,9 @@ class AssignmentScreen(GradescopeScreen):
     def compose(self) -> ComposeResult:
         yield Header()
         yield Static(id="info", classes="hint")
+        yield ProgressBar(id="progress", total=None)  # indeterminate until graded
         yield Static(id="status")
+        yield DataTable(id="cases", cursor_type="row")
         yield Footer()
 
     def on_mount(self) -> None:
@@ -328,6 +369,11 @@ class AssignmentScreen(GradescopeScreen):
             f"{self.assignment.title} (assignment {self.assignment.id}) — due {due} · "
             "s: submit · g: autograder · l: leaderboard · esc: back"
         )
+        cases = self.query_one("#cases", DataTable)
+        cases.display = False
+        cases.add_column("Test case", key="name")
+        cases.add_column("Result", key="result", width=9)
+        cases.add_column("Score", key="score", width=22)
         if self._submit_paths is not None:
             paths, self._submit_paths = self._submit_paths, None
             self._do_submit(paths)
@@ -402,18 +448,27 @@ class AssignmentScreen(GradescopeScreen):
         header = f"status: {result.status}"
         if result.score is not None and result.max_score is not None:
             header += f"  score: {result.score:g} / {result.max_score:g}"
-        lines = [header]
+        self._set_status(header)
+        bar = self.query_one("#progress", ProgressBar)
+        if result.status == "graded" and result.max_score:
+            bar.update(total=result.max_score, progress=result.score or 0.0)
+        else:
+            bar.update(total=None)  # indeterminate while pending
+        cases = self.query_one("#cases", DataTable)
+        cases.clear()
         for case in result.test_cases:
-            if case.score is not None and case.max_score is not None:
-                score = f"{case.score:g} / {case.max_score:g}"
-            else:
-                score = "n/a"
-            lines.append(f"  [{case.status:>7}] {case.name}: {score}")
-        self._set_status("\n".join(lines))
+            cases.add_row(
+                case.name,
+                case.status,
+                f"{score_bar(case.score, case.max_score)} {fmt_score(case.score, case.max_score)}",
+            )
+        cases.display = bool(result.test_cases)
 
     def _set_status(self, text: str) -> None:
         self.status_text = text
         self.query_one("#status", Static).update(text)
+        if text in {"submitting...", "checking autograder..."} or "watching" in text:
+            self.query_one("#progress", ProgressBar).update(total=None)
 
 
 class LeaderboardScreen(GradescopeScreen):

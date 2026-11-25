@@ -73,15 +73,16 @@ class TestLogin:
 
 
 class TestBrowse:
-    def test_list_courses_from_account_page(
+    def test_list_courses_from_account_page_sorted_by_term(
         self, session: FakeSession, client: GradescopeClient
     ) -> None:
         session.add("GET", "/account", FakeResponse(text=ACCOUNT_PAGE))
         session.add("GET", "/courses", FakeResponse(text="<html></html>"))
         courses = client.list_courses()
-        assert [c.id for c in courses] == ["111", "222"]
-        assert courses[0].name == "DSC 190 - Capstone Project"
-        assert courses[0].code == "DSC 190"
+        # Fall 2026 (222) sorts before Spring 2026 (111)
+        assert [c.id for c in courses] == ["222", "111"]
+        assert courses[0].name == "CSE 151A - Intro to ML"
+        assert courses[0].term == "Fall 2026"
 
     def test_list_courses_fallback_to_courses_page(
         self, session: FakeSession, client: GradescopeClient

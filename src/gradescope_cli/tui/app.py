@@ -29,6 +29,14 @@ class GradescopeApp(App[None]):
         padding: 1 2;
         height: auto;
     }
+    #progress {
+        height: 1;
+        padding: 0 2;
+    }
+    #cases {
+        height: auto;
+        max-height: 40%;
+    }
     DataTable {
         height: 1fr;
     }

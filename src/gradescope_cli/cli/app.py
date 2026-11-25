@@ -20,7 +20,7 @@ from datetime import datetime
 from pathlib import Path
 
 from gradescope_cli.api.client import GradescopeAPI, GradescopeClient
-from gradescope_cli.api.models import AutograderResult, LeaderboardEntry
+from gradescope_cli.api.models import Assignment, AutograderResult, LeaderboardEntry
 from gradescope_cli.config import ENV_EMAIL, Credentials, load_credentials
 from gradescope_cli.exceptions import ConfigError, GradescopeError
 
@@ -54,15 +54,22 @@ def cmd_login(args: argparse.Namespace, client: GradescopeAPI) -> int:
 
 
 def cmd_courses(args: argparse.Namespace, client: GradescopeAPI) -> int:
-    courses = client.list_courses()
+    courses = client.list_courses()  # sorted by term, most recent first
     if not courses:
         print("No courses found.")
         return 0
     width = max(len(c.name) for c in courses)
     for course in courses:
         code = f" ({course.code})" if course.code else ""
-        print(f"{course.id:>8}  {course.name:<{width}}{code}")
+        term = course.term or "-"
+        print(f"{course.id:>8}  {term:<12}  {course.name:<{width}}{code}")
     return 0
+
+
+def _fmt_score(a: Assignment) -> str:
+    if a.score is not None and a.max_score is not None:
+        return f"{a.score:g}/{a.max_score:g}"
+    return "-"
 
 
 def cmd_assignments(args: argparse.Namespace, client: GradescopeAPI) -> int:
@@ -72,7 +79,10 @@ def cmd_assignments(args: argparse.Namespace, client: GradescopeAPI) -> int:
         return 0
     width = max(len(a.title) for a in assignments)
     for a in assignments:
-        print(f"{a.id:>8}  {a.title:<{width}}  due {_fmt_due(a.due_date)}")
+        print(
+            f"{a.id:>8}  {a.title:<{width}}  due {_fmt_due(a.due_date):<16}  "
+            f"{(a.status or '-'):<10}  {_fmt_score(a)}"
+        )
     return 0
 
 

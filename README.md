@@ -52,9 +52,9 @@ assignment detail (submit files, watch the autograder, leaderboard).
 Keys:
 
 - login: type email/password, `enter` or click "Log In" · `q` quit
-- courses: `enter` open · `r` refresh · `q` quit
-- assignments: `enter` open · `s` submit files · `l` leaderboard · `r` refresh · `esc` back
-- assignment: `s` submit files · `g` autograder status · `l` leaderboard · `esc` back
+- courses (sorted by term, most recent first): `enter` open · `r` refresh · `q` quit
+- assignments (due date, status, score bar): `enter` open · `s` submit files · `l` leaderboard · `r` refresh · `esc` back
+- assignment (progress bar + per-test-case bars): `s` submit files · `g` autograder status · `l` leaderboard · `esc` back
   (submitting automatically watches the autograder until it finishes)
 
 `python -m gradescope_cli ...` works too.

@@ -13,6 +13,7 @@ class Course:
     id: str
     name: str
     code: str | None = None
+    term: str | None = None  # e.g. "Fall 2026"
     url: str = ""
 
 
@@ -24,6 +25,9 @@ class Assignment:
     course_id: str
     title: str
     due_date: datetime | None = None
+    status: str | None = None  # "open" | "submitted" | "graded"
+    score: float | None = None
+    max_score: float | None = None
     url: str = ""
 
 

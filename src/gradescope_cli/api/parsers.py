@@ -88,6 +88,36 @@ def _assignment_href(course_id: str) -> re.Pattern[str]:
     )
 
 
+_TERM_SEASON_RANK = {"winter": 0, "spring": 1, "summer": 2, "fall": 3}
+_TERM_RE = re.compile(r"^\s*(\w+)\s+(\d{4})\s*$")
+
+
+def term_sort_key(term: str | None) -> tuple[int, int]:
+    """Sort key for term labels like "Fall 2026" (academic year order)."""
+    if not term:
+        return (-1, -1)
+    m = _TERM_RE.match(term)
+    if m is None:
+        return (-1, -1)
+    return (int(m.group(2)), _TERM_SEASON_RANK.get(m.group(1).lower(), -1))
+
+
+def sort_courses_by_term(courses: list[Course]) -> list[Course]:
+    """Order courses by term, most recent first."""
+    return sorted(courses, key=lambda c: term_sort_key(c.term), reverse=True)
+
+
+def _term_for_course_box(box: Tag) -> str | None:
+    """Find the term label (e.g. "Fall 2026") a courseBox belongs to."""
+    container = box.find_parent("div", class_="courseList--coursesForTerm")
+    if container is None:
+        return None
+    term_div = container.find_previous_sibling("div", class_="courseList--term")
+    if term_div is None:
+        return None
+    return term_div.get_text(strip=True) or None
+
+
 def parse_courses(html: str) -> list[Course]:
     """Parse a courses page into a de-duplicated list of courses.
 
@@ -119,7 +149,13 @@ def parse_courses(html: str) -> list[Course]:
         )
         if code_el is not None:
             code = code_el.get_text(strip=True) or None
-        courses[course_id] = Course(id=course_id, name=name, code=code, url=f"/courses/{course_id}")
+        courses[course_id] = Course(
+            id=course_id,
+            name=name,
+            code=code,
+            term=_term_for_course_box(a),
+            url=f"/courses/{course_id}",
+        )
     if courses:
         return list(courses.values())
 
@@ -178,6 +214,37 @@ def _parse_time_datetime(tag: Tag) -> datetime | None:
         return datetime.fromisoformat(raw).replace(tzinfo=None)
     except ValueError:
         return None
+
+
+def _parse_submission_status_cell(row: Tag) -> tuple[str | None, float | None, float | None]:
+    """Extract (status, score, max_score) from a student-table row.
+
+    ``td.submissionStatus`` carries a ``submissionStatus-complete`` modifier
+    when submitted, and a ``.submissionStatus--score`` div like "8.5 / 10"
+    when graded.
+    """
+    cell = row.find("td", class_=lambda c: c is not None and "submissionStatus" in str(c))
+    if cell is None:
+        return None, None, None
+    cls_attr = cell.get("class")
+    classes = (
+        " ".join(str(c) for c in cls_attr) if isinstance(cls_attr, list) else str(cls_attr or "")
+    )
+    score: float | None = None
+    max_score: float | None = None
+    score_el = cell.find(class_=lambda c: c is not None and "score" in str(c).lower())
+    if score_el is not None:
+        m = _SCORE.search(score_el.get_text(" ", strip=True))
+        if m is not None:
+            score = float(m.group(1))
+            max_score = float(m.group(2))
+    if score is not None:
+        status = "graded"
+    elif "complete" in classes:
+        status = "submitted"
+    else:
+        status = "open"
+    return status, score, max_score
 
 
 def parse_assignments(html: str, course_id: str) -> list[Assignment]:
@@ -250,12 +317,16 @@ def parse_assignments(html: str, course_id: str) -> list[Assignment]:
                 if (d := _parse_time_datetime(t)) is not None
             ]
             due_date = max(due_dates) if due_dates else _find_due_date_in(tr)
+            status, score, max_score = _parse_submission_status_cell(tr)
             assignments.append(
                 Assignment(
                     id=aid,
                     course_id=course_id,
                     title=title,
                     due_date=due_date,
+                    status=status,
+                    score=score,
+                    max_score=max_score,
                     url=f"/courses/{course_id}/assignments/{aid}",
                 )
             )
@@ -326,6 +397,8 @@ def parse_assignments_react(html: str, course_id: str) -> list[Assignment]:
                     due_date = datetime.fromisoformat(raw_due).replace(tzinfo=None)
                 except ValueError:
                     due_date = None
+        status = "submitted" if row.get("student_submission") else "open"
+        max_score = _as_float(row.get("total_points"))
         url = row.get("url")
         assignments.append(
             Assignment(
@@ -333,6 +406,8 @@ def parse_assignments_react(html: str, course_id: str) -> list[Assignment]:
                 course_id=course_id,
                 title=title,
                 due_date=due_date,
+                status=status,
+                max_score=max_score,
                 url=url
                 if isinstance(url, str) and url
                 else f"/courses/{course_id}/assignments/{aid}",
@@ -342,8 +417,15 @@ def parse_assignments_react(html: str, course_id: str) -> list[Assignment]:
 
 
 def _as_float(value: Any) -> float | None:
-    if isinstance(value, (int, float)) and not isinstance(value, bool):
+    if isinstance(value, bool):
+        return None
+    if isinstance(value, (int, float)):
         return float(value)
+    if isinstance(value, str):
+        try:
+            return float(value)
+        except ValueError:
+            return None
     return None
 
 

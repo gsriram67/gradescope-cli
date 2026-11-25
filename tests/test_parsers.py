@@ -61,11 +61,23 @@ class TestParseDueDate:
 class TestParseCourses:
     def test_account_page_course_boxes(self) -> None:
         courses = parsers.parse_courses(ACCOUNT_PAGE)
-        assert [c.id for c in courses] == ["111", "222"]
+        assert [c.id for c in courses] == ["111", "222"]  # document order
         assert courses[0].name == "DSC 190 - Capstone Project"  # div.courseBox--name
         assert courses[0].code == "DSC 190"  # h3.courseBox--shortname
         assert courses[0].url == "/courses/111"
+        assert courses[0].term == "Spring 2026"  # courseList--term
         assert courses[1].name == "CSE 151A - Intro to ML"  # absolute URL variant
+        assert courses[1].term == "Fall 2026"
+
+    def test_sort_courses_by_term(self) -> None:
+        courses = parsers.parse_courses(ACCOUNT_PAGE)
+        sorted_courses = parsers.sort_courses_by_term(courses)
+        assert [c.id for c in sorted_courses] == ["222", "111"]  # Fall 2026 first
+        # unknown terms sort last
+        from gradescope_cli.api.models import Course as C
+
+        mixed = [C(id="1", name="old"), *sorted_courses]
+        assert [c.id for c in parsers.sort_courses_by_term(mixed)] == ["222", "111", "1"]
 
     def test_parses_and_dedupes(self) -> None:
         courses = parsers.parse_courses(COURSES_PAGE)
@@ -89,6 +101,13 @@ class TestParseAssignments:
         assert assignments[0].due_date == datetime(2026, 11, 25, 23, 59)
         assert assignments[1].due_date == datetime(2026, 12, 5, 9, 0)
         assert assignments[2].due_date is None
+        # status + score from td.submissionStatus
+        assert assignments[0].status == "graded"
+        assert assignments[0].score == 8.5
+        assert assignments[0].max_score == 10.0
+        assert assignments[1].status == "submitted"
+        assert assignments[1].score is None
+        assert assignments[2].status == "open"
 
     def test_react_assignments_page(self) -> None:
         assignments = parsers.parse_assignments_react(ASSIGNMENTS_REACT_PAGE, "111")
@@ -98,6 +117,9 @@ class TestParseAssignments:
         assert assignments[1].due_date == datetime(2026, 12, 5, 9, 0)
         assert assignments[2].due_date is None
         assert assignments[0].url == "/courses/111/assignments/777"
+        assert assignments[0].status == "submitted"
+        assert assignments[0].max_score == 10.0
+        assert assignments[1].status == "open"
 
     def test_react_page_missing(self) -> None:
         assert parsers.parse_assignments_react("<html></html>", "111") == []

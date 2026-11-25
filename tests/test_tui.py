@@ -184,6 +184,10 @@ def test_navigate_to_assignments() -> None:
             screen = app.screen
             assert isinstance(screen, AssignmentsScreen)
             assert screen.course.id == "111"
+            # score column renders a graphical bar for the graded assignment
+            row = app.screen.query_one(DataTable).get_row_at(0)
+            assert "█" in str(row[4]) and "8.5/10" in str(row[4])
+            assert str(row[3]) == "graded"
 
     run(go())
 

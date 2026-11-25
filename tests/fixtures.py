@@ -32,12 +32,15 @@ ACCOUNT_PAGE = """
 <html><body>
   <h2 class="pageHeading">Student Courses</h2>
   <div class="courseList">
-    <div class="courseList--term">Fall 2026</div>
+    <div class="courseList--term">Spring 2026</div>
     <div class="courseList--coursesForTerm">
       <a class="courseBox" href="/courses/111">
         <h3 class="courseBox--shortname">DSC 190</h3>
         <div class="courseBox--name">DSC 190 - Capstone Project</div>
       </a>
+    </div>
+    <div class="courseList--term">Fall 2026</div>
+    <div class="courseList--coursesForTerm">
       <a class="courseBox" href="https://www.gradescope.com/courses/222">
         <h3 class="courseBox--shortname">CSE 151A</h3>
         <div class="courseBox--name">CSE 151A - Intro to ML</div>
@@ -56,7 +59,9 @@ DASHBOARD_PAGE = """
           <button data-assignment-id="777"
                   data-post-url="/courses/111/assignments/777/submissions">Homework 1</button>
         </th>
-        <td class="submissionStatus"><div class="submissionStatus--score">8.5 / 10</div></td>
+        <td class="submissionStatus submissionStatus-complete">
+          <div class="submissionStatus--score">8.5 / 10</div>
+        </td>
         <td>
           <time class="submissionTimeChart--releaseDate"
               datetime="2026-11-01T00:00:00-07:00"></time>
@@ -69,7 +74,7 @@ DASHBOARD_PAGE = """
           <button data-assignment-id="888"
                   data-post-url="/courses/111/assignments/888/submissions">Homework 2</button>
         </th>
-        <td class="submissionStatus"></td>
+        <td class="submissionStatus submissionStatus-complete"></td>
         <td>
           <time class="submissionTimeChart--releaseDate"
               datetime="2026-11-20T00:00:00-08:00"></time>
@@ -95,9 +100,11 @@ ASSIGNMENTS_REACT_PAGE = """
   <div data-react-class="AssignmentsTable"
        data-react-props='{"table_data": [
          {"id": 777, "title": "Homework 1", "url": "/courses/111/assignments/777",
+          "student_submission": true, "total_points": "10.0",
           "submission_window": {"release_date": "2026-11-01T00:00:00-07:00",
                                 "due_date": "2026-11-25T23:59:00-08:00"}},
          {"id": 888, "title": "Homework 2", "url": "/courses/111/assignments/888",
+          "student_submission": false, "total_points": "10.0",
           "submission_window": {"due_date": "2026-12-05T09:00:00-08:00"}},
          {"id": 999, "title": "Extra credit", "url": "/courses/111/assignments/999"}
        ]}'></div>

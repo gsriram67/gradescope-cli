@@ -210,7 +210,7 @@ class GradescopeClient:
             got_page = True
             courses = parsers.parse_courses(page.text)
             if courses:
-                return courses
+                return parsers.sort_courses_by_term(courses)
         if not got_page and first_error is not None:
             raise first_error
         return []
